@@ -1,6 +1,6 @@
 import Foundation
 
-/// Turns whatever the transcriber heard into one of the twelve commands.
+/// Turns whatever the transcriber heard into one of the seven commands.
 ///
 /// Pure by design — no framework, no state, no I/O. Every accuracy decision in the
 /// app that can be reasoned about without a microphone lives here.
@@ -19,23 +19,6 @@ nonisolated enum CommandParser {
 
         ("resume", .resume), ("continue", .resume), ("keep going", .resume),
         ("carry on", .resume), ("go on", .resume),
-
-        ("stop", .stop),
-
-        ("slower", .slower), ("slow down", .slower), ("too fast", .slower), ("ease up", .slower),
-
-        ("faster", .faster), ("speed up", .faster), ("too slow", .faster),
-        ("harder", .faster), ("pick it up", .faster),
-
-        ("again", .again), ("repeat", .again), ("one more time", .again),
-
-        // "escape" is not a thing anyone says to a heavy bag — it's what the
-        // recognizer hears when you say "skip". Mishearings observed in real use
-        // are cheaper to accept than to fight, and adding them here also biases
-        // the recognizer toward them via `contextualStrings`, so the mistake
-        // becomes a reliable one.
-        ("skip", .skip), ("skip it", .skip), ("next combo", .skip),
-        ("escape", .skip), ("skipped", .skip),
 
         ("next round", .nextRound), ("next", .nextRound),
 

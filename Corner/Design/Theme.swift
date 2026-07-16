@@ -31,7 +31,9 @@ enum Theme {
             .system(size: size, weight: .bold, design: .rounded).monospacedDigit()
         }
 
-        static let combo = Font.system(size: 64, weight: .black, design: .default)
+        /// The one line of coaching on screen. Sized to be read from wherever the
+        /// phone ended up, which is the whole reason it's this big.
+        static let focus = Font.system(size: 64, weight: .black, design: .default)
         static let roundLabel = Font.system(size: 22, weight: .semibold, design: .rounded)
     }
 }

@@ -35,7 +35,7 @@ struct LiveSessionView: View {
                 header
                 Spacer()
                 timer
-                combo
+                focus
                 Spacer()
                 footer
             }
@@ -83,16 +83,23 @@ struct LiveSessionView: View {
             .animation(.smooth(duration: 0.2), value: engine.secondsRemaining)
     }
 
+    /// What this round is for.
+    ///
+    /// The only coaching on screen, and the only place the session's shape is
+    /// visible now that the cornerman goes quiet after the intro. Sits where the
+    /// combo callout used to, in the same big type, because the job is the same:
+    /// readable at a glance from wherever the phone ended up.
     @ViewBuilder
-    private var combo: some View {
-        // Reserve the space so the timer doesn't jump between callouts.
-        Text(engine.currentCombo?.display ?? " ")
-            .font(Theme.Fonts.combo)
+    private var focus: some View {
+        // Reserve the space so the timer doesn't jump between rounds.
+        Text(engine.isResting ? "Rest" : (engine.round?.focus ?? " "))
+            .font(Theme.Fonts.focus)
             .foregroundStyle(Theme.Palette.primaryText)
             .minimumScaleFactor(0.5)
             .lineLimit(1)
             .contentTransition(.opacity)
-            .animation(.smooth(duration: 0.15), value: engine.currentCombo)
+            .animation(.smooth(duration: 0.15), value: engine.round?.focus)
+            .animation(.smooth(duration: 0.15), value: engine.isResting)
             .frame(maxWidth: .infinity)
     }
 
@@ -152,12 +159,17 @@ struct LiveSessionView: View {
 
     // MARK: - Derived
 
+    /// Deliberately not the focus — that's in 64pt in the middle of the screen
+    /// now that the combo callout isn't. Saying it twice wastes the only other
+    /// line there's room for, and where you are in the session is the thing the
+    /// big text can't tell you.
     private var headline: String {
         switch engine.phase {
         case .idle: "Say \"let's go\""
-        case .announcing, .active:
-            if let round = engine.round { "R\(round.index) · \(round.focus)" } else { "" }
-        case .resting: "Rest"
+        case .announcing, .active, .resting:
+            if let round = engine.round {
+                "Round \(round.index) of \(engine.totalRounds)"
+            } else { "" }
         case .debrief: "Done"
         }
     }

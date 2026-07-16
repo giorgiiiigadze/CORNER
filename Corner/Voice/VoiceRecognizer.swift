@@ -1,15 +1,16 @@
 import Foundation
 
-/// The twelve. Taught during onboarding, listed in Settings, never needed on screen.
+/// The seven. Taught during onboarding, listed in Settings, never needed on screen.
+///
+/// There were twelve. `skip`, `again`, `stop`, `slower` and `faster` all meant
+/// "do something to the combo callouts" — skip this one, repeat that one, pace
+/// them differently — and there are no callouts now. They're gone rather than
+/// left as no-ops: a command that's understood and does nothing is worse than one
+/// that isn't understood, because the fighter can't tell which happened.
 nonisolated enum VoiceCommand: String, Sendable, CaseIterable, Hashable {
     case start
     case pause
     case resume
-    case stop
-    case slower
-    case faster
-    case again
-    case skip
     case nextRound
     case oneMoreRound
     case timeCheck
@@ -30,15 +31,6 @@ nonisolated protocol VoiceRecognizer: Sendable {
     /// actually heard, a missed command and a misheard one look identical, and
     /// "it didn't work" is unfalsifiable.
     var transcripts: AsyncStream<String> { get async }
-
-    /// Things said that the twelve commands don't cover — "give me something for
-    /// the body", "my shoulder hurts".
-    ///
-    /// Everything on this stream costs a network round-trip and real money, so
-    /// it's gated hard: finalized results only, never half-heard volatile ones,
-    /// and never a single stray word. The twelve never appear here — they're
-    /// answered on-device and instantly, and must stay that way.
-    var unhandled: AsyncStream<String> { get async }
 
     func start() async throws
     func stop() async

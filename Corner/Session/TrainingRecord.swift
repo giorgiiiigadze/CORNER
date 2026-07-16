@@ -18,8 +18,6 @@ final class TrainingRecord {
     var roundsCompleted: Int = 0
     /// How often they asked for the callouts to space out. Real evidence the
     /// pace was wrong for them, not a guess.
-    var slowerRequests: Int = 0
-    var fasterRequests: Int = 0
     /// True when they said "end session" rather than finishing the last round.
     var endedEarly: Bool = false
 
@@ -29,8 +27,6 @@ final class TrainingRecord {
         focuses: [String],
         roundsPlanned: Int,
         roundsCompleted: Int,
-        slowerRequests: Int,
-        fasterRequests: Int,
         endedEarly: Bool
     ) {
         self.date = date
@@ -38,8 +34,6 @@ final class TrainingRecord {
         self.focuses = focuses
         self.roundsPlanned = roundsPlanned
         self.roundsCompleted = roundsCompleted
-        self.slowerRequests = slowerRequests
-        self.fasterRequests = fasterRequests
         self.endedEarly = endedEarly
     }
 
@@ -50,8 +44,6 @@ final class TrainingRecord {
             focuses: summary.focuses,
             roundsPlanned: summary.roundsPlanned,
             roundsCompleted: summary.roundsCompleted,
-            slowerRequests: summary.slowerRequests,
-            fasterRequests: summary.fasterRequests,
             endedEarly: summary.endedEarly
         )
     }
@@ -64,8 +56,6 @@ nonisolated struct SessionSummary: Sendable, Equatable {
     var focuses: [String]
     var roundsPlanned: Int
     var roundsCompleted: Int
-    var slowerRequests: Int
-    var fasterRequests: Int
     var endedEarly: Bool
 }
 
@@ -99,17 +89,6 @@ extension TrainingProfile {
     private static func notes(from recent: [TrainingRecord]) -> [String] {
         guard let last = recent.first else { return [] }
         var notes: [String] = []
-
-        let slower = recent.reduce(0) { $0 + $1.slowerRequests }
-        let faster = recent.reduce(0) { $0 + $1.fasterRequests }
-
-        // Only report the lopsided cases. Someone who asked once each was
-        // finding their pace, not telling us anything.
-        if slower > faster + 1 {
-            notes.append("Has asked for the pace to slow down \(slower) times recently — the callouts are coming too fast for them")
-        } else if faster > slower + 1 {
-            notes.append("Has asked to speed up \(faster) times recently — they want more work per round")
-        }
 
         if last.endedEarly {
             notes.append("Ended their last session early, after \(last.roundsCompleted) of \(last.roundsPlanned) rounds")

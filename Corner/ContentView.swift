@@ -260,11 +260,7 @@ struct ContentView: View {
         live = SessionEngine(
             session: session,
             voice: voice,
-            recognizer: SpeechAnalyzerRecognizer(),
-            // Answers what the twelve commands can't. Nil without a key, and the
-            // twelve keep working either way.
-            coach: LiveCoach(client: try? ClaudeClient.fromBundle()),
-            level: TrainingProfile.Level(rawValue: level) ?? .beginner
+            recognizer: SpeechAnalyzerRecognizer()
         )
     }
 

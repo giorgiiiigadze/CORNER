@@ -5,8 +5,9 @@ import Testing
 ///
 /// `BundledSessions` is what runs when Claude can't be reached — a garage with no
 /// signal, which is the pitch. Nothing else in the suite touches this file, so a
-/// field added to `Round` breaks decoding and every test still passes. That's how
-/// it nearly shipped: `cues` was added and these nine rounds didn't have it.
+/// change to `Round` breaks decoding and every other test still passes. That's
+/// how it nearly shipped once: `cues` was added and these nine rounds didn't
+/// have it.
 struct BundledSessionsTests {
 
     @Test func theyDecode() throws {
@@ -14,38 +15,43 @@ struct BundledSessionsTests {
         #expect(!sessions.isEmpty)
     }
 
-    /// A round with no cues is a round the cornerman works in silence between
-    /// combos — which is the machine reading numbers this was meant to replace.
-    @Test func everyRoundIsCoached() throws {
+    /// The intro is the only thing the app says all session, so a bundled session
+    /// without one is twenty silent minutes with no idea what they're for.
+    @Test func everySessionSaysWhatItIsFor() throws {
+        for session in try BundledSessions.load() {
+            let intro = session.intro ?? ""
+            #expect(!intro.isEmpty, "\(session.title) never says what it's for")
+        }
+    }
+
+    /// Two sentences, same as the prompt demands of Claude. These are the only
+    /// intros written by hand, so nothing else stops them drifting back into the
+    /// five-sentence speech they used to be — and the fighter gets one idea to
+    /// hold for twenty minutes, so it had better be one.
+    @Test func introsAreTwoSentences() throws {
+        for session in try BundledSessions.load() {
+            let sentences = (session.intro ?? "").filter { ".!?".contains($0) }.count
+            #expect(sentences <= 2, "\(session.title)'s intro is a speech, not a plan")
+        }
+    }
+
+    /// The focus is read off a screen from across a room. A sentence doesn't fit
+    /// and doesn't get read.
+    @Test func everyRoundHasAShortFocus() throws {
         for session in try BundledSessions.load() {
             for round in session.rounds {
-                #expect(!round.cues.isEmpty, "\(session.title) / \(round.focus) has no cues")
-                #expect(round.cues.count <= 3, "\(round.focus) cycles too many to teach any")
+                #expect(!round.focus.isEmpty, "\(session.title) round \(round.index) has no focus")
+                let words = round.focus.split(separator: " ").count
+                #expect(words <= 4, "\"\(round.focus)\" is too long to read at a glance")
             }
         }
     }
 
-    /// The whole mechanism is repetition, so a cue is heard eight times a round.
-    /// Anything sentence-length becomes unbearable by the third pass.
-    @Test func cuesAreShort() throws {
+    /// The last round has nothing to rest for, and resting after it would leave
+    /// the fighter standing there waiting for a bell that means nothing.
+    @Test func theLastRoundHasNoRest() throws {
         for session in try BundledSessions.load() {
-            for round in session.rounds {
-                for cue in round.cues {
-                    let words = cue.split(separator: " ").count
-                    #expect(words <= 5, "\"\(cue)\" is too long to repeat")
-                }
-            }
-        }
-    }
-
-    /// Combos are served at random from the round's list, so a duplicate is a
-    /// combo the fighter hears twice as often as the rest.
-    @Test func combosAreDistinct() throws {
-        for session in try BundledSessions.load() {
-            for round in session.rounds {
-                let displays = round.combos.map(\.display)
-                #expect(Set(displays).count == displays.count, "\(round.focus) repeats a combo")
-            }
+            #expect(session.rounds.last?.restSeconds == 0, "\(session.title) rests after the last round")
         }
     }
 }

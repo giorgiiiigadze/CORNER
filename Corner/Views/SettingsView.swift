@@ -165,13 +165,8 @@ nonisolated enum CommandReference {
 
     static let all: [Entry] = [
         Entry(command: .start, say: "\u{201C}Let\u{2019}s go\u{201D}", does: "Start"),
-        Entry(command: .pause, say: "\u{201C}Pause\u{201D}", does: "Freeze mid-combo"),
+        Entry(command: .pause, say: "\u{201C}Pause\u{201D}", does: "Stop the clock"),
         Entry(command: .resume, say: "\u{201C}Resume\u{201D}", does: "Carry on"),
-        Entry(command: .slower, say: "\u{201C}Slower\u{201D}", does: "More space between calls"),
-        Entry(command: .faster, say: "\u{201C}Faster\u{201D}", does: "Less space"),
-        Entry(command: .again, say: "\u{201C}Again\u{201D}", does: "Repeat the last combo"),
-        Entry(command: .stop, say: "\u{201C}Stop\u{201D}", does: "Quit repeating"),
-        Entry(command: .skip, say: "\u{201C}Skip\u{201D}", does: "Next combo"),
         Entry(command: .nextRound, say: "\u{201C}Next round\u{201D}", does: "End this round"),
         Entry(command: .oneMoreRound, say: "\u{201C}One more round\u{201D}", does: "Add a round"),
         Entry(command: .timeCheck, say: "\u{201C}How much time\u{201D}", does: "Speaks the clock"),

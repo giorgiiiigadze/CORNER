@@ -14,8 +14,6 @@ struct TrainingProfileTests {
         focuses: [String] = ["Hooks"],
         planned: Int = 6,
         completed: Int = 6,
-        slower: Int = 0,
-        faster: Int = 0,
         endedEarly: Bool = false
     ) -> TrainingRecord {
         TrainingRecord(
@@ -24,8 +22,6 @@ struct TrainingProfileTests {
             focuses: focuses,
             roundsPlanned: planned,
             roundsCompleted: completed,
-            slowerRequests: slower,
-            fasterRequests: faster,
             endedEarly: endedEarly
         )
     }
@@ -69,21 +65,11 @@ struct TrainingProfileTests {
 
     // MARK: - Notes
 
-    @Test func repeatedSlowerRequestsBecomeANote() {
-        let history = [record(daysAgo: 1, slower: 3, faster: 0)]
-        let profile = TrainingProfile.from(history: history, level: .beginner)
-
-        #expect(profile.notes.contains { $0.contains("slow down") })
-    }
-
-    /// One of each is someone finding their pace, not a signal. Reporting it
-    /// would have the cornerman "correcting" a preference that doesn't exist.
-    @Test func balancedTempoRequestsAreNotWorthMentioning() {
-        let history = [record(daysAgo: 1, slower: 1, faster: 1)]
-        let profile = TrainingProfile.from(history: history, level: .beginner)
-
-        #expect(!profile.notes.contains { $0.contains("slow down") || $0.contains("speed up") })
-    }
+    // The two tempo-note tests that lived here are gone with the counters they
+    // read. "Slower" and "faster" were about the pace of combo callouts, and
+    // there are none — so the note could only ever have summed two zeroes, while
+    // these tests kept passing by building records with the numbers baked in.
+    // A green test over unreachable code is worse than no test.
 
     @Test func endingEarlyIsRemembered() {
         let history = [record(daysAgo: 1, planned: 6, completed: 2, endedEarly: true)]
