@@ -155,7 +155,7 @@ final class SessionEngine {
             for await text in transcripts {
                 guard let self else { return }
                 self.lastHeard = text
-                await self.bargeIn()
+                await self.bargeIn(on: text)
             }
         }
     }
@@ -171,11 +171,26 @@ final class SessionEngine {
     /// Still earns its place with the coach mostly silent: the intro is the one
     /// long line left, and it's exactly the one a fighter talks over to get going.
     ///
-    /// Safe to call on anything reaching the transcript stream: the recognizer
-    /// has already discarded the cornerman's own voice, so whatever arrives here
-    /// while he's speaking is a real voice in the room.
-    private func bargeIn() async {
+    /// The recognizer has already discarded the cornerman's own voice, so
+    /// whatever arrives here while he's speaking is a real voice in the room.
+    /// What it hasn't discarded is a voice that already got what it asked for.
+    private func bargeIn(on text: String) async {
         guard speaking != nil else { return }
+
+        // A command speaks for itself, so it never barges in. `pause` cancels the
+        // line in its own handler; `start` must not cancel the very line it just
+        // started.
+        //
+        // That last one was cutting the intro off mid-sentence, every session.
+        // "Let's go" fires `start`, the session begins, the intro starts playing
+        // — and the recognizer is still finalizing that same "let's go". Those
+        // trailing results are a real voice saying real words, so the echo filter
+        // passed them through exactly as designed, and the fighter's own command
+        // cut off the answer to it. The transcript stream publishes results the
+        // recognizer has already acted on, so being a real voice isn't enough;
+        // it has to be a voice that hasn't been served yet.
+        guard CommandParser.parse(text) == nil else { return }
+
         await voice.cancel()
     }
 

@@ -261,6 +261,41 @@ struct SessionEngineTests {
         #expect(await voice.cancelCount == 1, "speech during a line must cut the cornerman off")
     }
 
+    /// The intro was cut off mid-sentence, every single session, and this is why.
+    ///
+    /// "Let's go" starts the session; the intro begins; the recognizer is still
+    /// finalizing that same "let's go" and publishes it again. It's a real voice
+    /// saying real words, so the echo filter passes it — and the fighter's own
+    /// command kills the answer to it.
+    @Test func theCommandThatStartedTheSessionDoesNotCutItOff() async throws {
+        let (engine, voice, recognizer, _) = makeEngine()
+        await voice.hold()
+        try await engine.beginListening()
+        await recognizer.hear(.start)
+        await settle()
+
+        // The recognizer finishing with the utterance it already acted on.
+        await recognizer.transcribe("lets go")
+        await settle()
+
+        #expect(await voice.cancelCount == 0, "the intro must survive the command that asked for it")
+    }
+
+    /// Commands don't barge in because they cut the line themselves where it
+    /// makes sense to — `pause` in its own handler. This is what makes the rule
+    /// above safe rather than a loophole.
+    @Test func pauseStillStopsHimMidLine() async throws {
+        let (engine, voice, recognizer, _) = makeEngine()
+        await voice.hold()
+        try await engine.beginListening()
+        await recognizer.hear(.start)
+        await settle()
+        await recognizer.hear(.pause)
+        await settle()
+
+        #expect(await voice.cancelCount == 1, "pause must still cut the intro off")
+    }
+
     /// The mirror, and the reason it can't just cancel on every transcript:
     /// nothing is playing, so there's nothing to interrupt.
     @Test func doesNotBargeInWhenTheCornermanIsQuiet() async throws {
