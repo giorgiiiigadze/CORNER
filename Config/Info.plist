@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Base Info.plist. Xcode merges its generated keys (usage descriptions,
+	     orientations, scene manifest) on top of this at build time.
+
+	     This exists solely because INFOPLIST_KEY_* build settings only support
+	     Apple's own known keys - an arbitrary one is silently dropped. The value
+	     below is substituted from Secrets.xcconfig, which is gitignored.
+
+	     The key lands in the app bundle in plain text and can be extracted from
+	     the .ipa. Fine on your own device; a ship-blocker for public TestFlight. -->
+	<key>ANTHROPIC_API_KEY</key>
+	<string>$(ANTHROPIC_API_KEY)</string>
+</dict>
+</plist>

@@ -1,0 +1,126 @@
+[
+  {
+    "id": "intro-3",
+    "title": "Intro",
+    "rounds": [
+      {
+        "index": 1,
+        "focus": "Straight punches",
+        "durationSeconds": 180,
+        "restSeconds": 60,
+        "cornerTalk": "Good. Hands are dropping after the cross. Next round, snap it back to your chin every time.",
+        "combos": [
+          { "display": "1", "spoken": "jab" },
+          { "display": "1 - 1", "spoken": "double jab" },
+          { "display": "1 - 2", "spoken": "one, two" },
+          { "display": "1 - 1 - 2", "spoken": "one, one, two" },
+          { "display": "2 - 1 - 2", "spoken": "two, one, two" }
+        ]
+      },
+      {
+        "index": 2,
+        "focus": "Hooks",
+        "durationSeconds": 180,
+        "restSeconds": 60,
+        "cornerTalk": "Turn that lead foot on the hook. You're arm punching. Last round, let's see some legs in it.",
+        "combos": [
+          { "display": "1 - 2 - 3", "spoken": "one, two, three" },
+          { "display": "3 - 2", "spoken": "three, two" },
+          { "display": "1 - 2 - 3 - 2", "spoken": "one, two, three, two" },
+          { "display": "2 - 3 - 2", "spoken": "two, three, two" }
+        ]
+      },
+      {
+        "index": 3,
+        "focus": "Head movement",
+        "durationSeconds": 180,
+        "restSeconds": 0,
+        "cornerTalk": null,
+        "combos": [
+          { "display": "1 - 2 - slip", "spoken": "one, two, slip" },
+          { "display": "slip - 2", "spoken": "slip, cross" },
+          { "display": "1 - 2 - roll - 3", "spoken": "one, two, roll, hook" },
+          { "display": "1 - slip - 1 - 2", "spoken": "jab, slip, one, two" }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "power-6",
+    "title": "Power day",
+    "rounds": [
+      {
+        "index": 1,
+        "focus": "Range finding",
+        "durationSeconds": 180,
+        "restSeconds": 60,
+        "cornerTalk": "Nice and long. Now start sitting down on the right hand.",
+        "combos": [
+          { "display": "1", "spoken": "jab" },
+          { "display": "1 - 1", "spoken": "double jab" },
+          { "display": "1 - 2", "spoken": "one, two" }
+        ]
+      },
+      {
+        "index": 2,
+        "focus": "Sitting on the cross",
+        "durationSeconds": 180,
+        "restSeconds": 60,
+        "cornerTalk": "Better. Breathe out on every shot. Body next.",
+        "combos": [
+          { "display": "1 - 2", "spoken": "one, two" },
+          { "display": "1 - 2 - 2", "spoken": "one, two, two" },
+          { "display": "2 - 3 - 2", "spoken": "two, three, two" }
+        ]
+      },
+      {
+        "index": 3,
+        "focus": "Body shots",
+        "durationSeconds": 180,
+        "restSeconds": 60,
+        "cornerTalk": "Bend the knees, don't bend the back. Shake it out.",
+        "combos": [
+          { "display": "1 - 2b", "spoken": "jab, cross to the body" },
+          { "display": "1 - 2 - 3b", "spoken": "one, two, hook to the body" },
+          { "display": "2b - 3", "spoken": "body, head hook" }
+        ]
+      },
+      {
+        "index": 4,
+        "focus": "Uppercuts",
+        "durationSeconds": 180,
+        "restSeconds": 60,
+        "cornerTalk": "Short and up. You're swinging. Two rounds left, empty the tank.",
+        "combos": [
+          { "display": "5 - 2", "spoken": "uppercut, cross" },
+          { "display": "1 - 6 - 3", "spoken": "jab, uppercut, hook" },
+          { "display": "5 - 6 - 3 - 2", "spoken": "five, six, three, two" }
+        ]
+      },
+      {
+        "index": 5,
+        "focus": "Long combinations",
+        "durationSeconds": 180,
+        "restSeconds": 60,
+        "cornerTalk": "One more. Everything you've got left.",
+        "combos": [
+          { "display": "1 - 2 - 3 - 2 - 5", "spoken": "one, two, three, two, uppercut" },
+          { "display": "1 - 1 - 2 - 3 - 2", "spoken": "one, one, two, three, two" },
+          { "display": "1 - 2 - 5 - 2 - 3", "spoken": "one, two, five, two, three" }
+        ]
+      },
+      {
+        "index": 6,
+        "focus": "Empty the tank",
+        "durationSeconds": 180,
+        "restSeconds": 0,
+        "cornerTalk": null,
+        "combos": [
+          { "display": "1 - 2 - 3 - 2", "spoken": "one, two, three, two" },
+          { "display": "OUT", "spoken": "flurry! everything!" },
+          { "display": "1 - 2 - 5 - 2", "spoken": "one, two, five, two" }
+        ]
+      }
+    ]
+  }
+]

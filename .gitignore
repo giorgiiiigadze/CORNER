@@ -1,0 +1,16 @@
+# Secrets — never commit. A key in git history is forever, even after a revert.
+Secrets.xcconfig
+
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcscmblueprint
+*.xccheckout
+.DS_Store
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Packages/
