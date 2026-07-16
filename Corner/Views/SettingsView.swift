@@ -9,30 +9,41 @@ import SwiftUI
 /// the app feel less like Apple built it.
 struct SettingsView: View {
 
-    @AppStorage(VoiceCatalog.preferenceKey) private var voiceIdentifier: String = ""
-    @Environment(\.dismiss) private var dismiss
-    @State private var previewing: String?
 
-    private let voices = VoiceCatalog.installed()
+    @AppStorage(ElevenLabsVoice.preferenceKey) private var cornermanVoiceID: String = ElevenLabsCatalog.defaultVoiceID
+    @AppStorage(TrainingProfile.levelKey) private var level: String = TrainingProfile.Level.beginner.rawValue
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var cornerman: [ElevenLabsCatalog.Entry] = []
+    @State private var cornermanProblem: String?
+    @State private var loadingCornerman = true
+
+
     private let preview = VoicePreviewer()
 
     var body: some View {
         NavigationStack {
             List {
-                if VoiceCatalog.needsBetterVoiceDownload {
-                    Section {
-                        downloadPrompt
+                Section {
+                    Picker("Level", selection: $level) {
+                        ForEach(TrainingProfile.Level.allCases, id: \.rawValue) { level in
+                            Text(level.rawValue.capitalized).tag(level.rawValue)
+                        }
                     }
+                } header: {
+                    Text("You")
+                } footer: {
+                    // The app can see what you drilled and when you asked it to
+                    // slow down. It cannot see how good you are, so it asks.
+                    Text("Everything else the cornerman knows, it learns from your sessions.")
                 }
 
                 Section {
-                    ForEach(voices) { voice in
-                        row(for: voice)
-                    }
+                    cornermanVoices
                 } header: {
                     Text("Cornerman voice")
                 } footer: {
-                    Text("Tap to hear it call a combination. The voice is the app — pick one you'd take instructions from.")
+                    Text("Tap to hear it. The voice is the app — pick one you'd take instructions from.")
                 }
 
                 Section("The twelve commands") {
@@ -44,6 +55,7 @@ struct SettingsView: View {
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
+            .task { await loadCornermanVoices() }
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
@@ -53,68 +65,75 @@ struct SettingsView: View {
         .preferredColorScheme(.dark)
     }
 
-    // MARK: - Pieces
-
-    /// The highest-value thing on this screen. Only the user can install a good
-    /// voice, so the app's whole job is to tell them it's worth doing and where.
-    private var downloadPrompt: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label("Only robot voices installed", systemImage: "exclamationmark.triangle.fill")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(Theme.Palette.accent)
-            Text("""
-                iOS ships one basic voice and downloads the good ones on request. \
-                A Premium voice sounds like a person and costs nothing.
-                """)
-            .font(.footnote)
-            .foregroundStyle(Theme.Palette.secondaryText)
-            Text("Settings \u{203A} Accessibility \u{203A} Spoken Content \u{203A} Voices \u{203A} English")
-                .font(.footnote.weight(.medium))
-            Button("Open Settings") {
-                if let url = URL(string: UIApplication.openSettingsURLString) {
-                    UIApplication.shared.open(url)
-                }
+    /// The cornerman. The only voice the user picks.
+    ///
+    /// iOS speech is still under this as an emergency fallback, but it is
+    /// deliberately not offered here: it's what speaks if the network dies
+    /// mid-round, and the alternative in that moment is silence, not choice.
+    @ViewBuilder
+    private var cornermanVoices: some View {
+        if loadingCornerman {
+            HStack(spacing: 12) {
+                ProgressView()
+                Text("Loading voices\u{2026}")
+                    .foregroundStyle(Theme.Palette.secondaryText)
             }
-            .font(.footnote.weight(.semibold))
-            .buttonStyle(.borderless)
-        }
-        .padding(.vertical, 4)
-    }
-
-    private func row(for voice: VoiceCatalog.Entry) -> some View {
-        Button {
-            voiceIdentifier = voice.id
-            previewing = voice.id
-            preview.play(voice.id)
-        } label: {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(voice.name)
-                        .foregroundStyle(Theme.Palette.primaryText)
-                    if let note = voice.quality.note {
-                        Text(note)
-                            .font(.caption)
-                            .foregroundStyle(Theme.Palette.secondaryText)
+        } else if let cornermanProblem {
+            VStack(alignment: .leading, spacing: 6) {
+                Label("Can't load voices", systemImage: "exclamationmark.triangle.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Theme.Palette.accent)
+                Text(cornermanProblem)
+                    .font(.footnote)
+                    .foregroundStyle(Theme.Palette.secondaryText)
+                Button("Try again") { Task { await loadCornermanVoices() } }
+                    .font(.footnote.weight(.semibold))
+                    .buttonStyle(.borderless)
+            }
+            .padding(.vertical, 4)
+        } else {
+            ForEach(cornerman) { voice in
+                Button {
+                    cornermanVoiceID = voice.id
+                    if let url = voice.previewURL { preview.play(url: url) }
+                } label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(voice.name)
+                                .foregroundStyle(Theme.Palette.primaryText)
+                            if let description = voice.description {
+                                Text(description)
+                                    .font(.caption)
+                                    .foregroundStyle(Theme.Palette.secondaryText)
+                            }
+                        }
+                        Spacer()
+                        if voice.id == cornermanVoiceID {
+                            Image(systemName: "checkmark")
+                                .font(.body.weight(.semibold))
+                                .foregroundStyle(Theme.Palette.accent)
+                        }
                     }
                 }
-                Spacer()
-                Text(voice.quality.label)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(voice.quality > .compact ? Theme.Palette.accent : Theme.Palette.secondaryText)
-                if isSelected(voice) {
-                    Image(systemName: "checkmark")
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(Theme.Palette.accent)
-                }
             }
         }
     }
 
-    /// An empty stored value means "never chosen", which resolves to the best
-    /// installed voice — so that's the one to tick.
-    private func isSelected(_ voice: VoiceCatalog.Entry) -> Bool {
-        voiceIdentifier.isEmpty ? voice.id == voices.first?.id : voice.id == voiceIdentifier
+    private func loadCornermanVoices() async {
+        loadingCornerman = true
+        cornermanProblem = nil
+        defer { loadingCornerman = false }
+        do {
+            cornerman = try await ElevenLabsCatalog.load()
+        } catch {
+            cornermanProblem = error.localizedDescription
+        }
     }
+
+    // MARK: - Pieces
+
+
+
 }
 
 /// Speaks the sample line. Separate from `Cornerman` because a preview has no
@@ -122,13 +141,18 @@ struct SettingsView: View {
 @MainActor
 private final class VoicePreviewer {
     private let synthesizer = AVSpeechSynthesizer()
+    private var player: AVPlayer?
 
-    func play(_ identifier: String) {
+
+    /// Previews a cornerman voice by streaming the sample ElevenLabs hosts.
+    ///
+    /// Deliberately not generating our own preview: auditioning a dozen voices
+    /// would burn a dozen paid generations, and these samples are free.
+    func play(url: URL) {
         synthesizer.stopSpeaking(at: .immediate)
-        let utterance = AVSpeechUtterance(string: VoiceCatalog.previewLine)
-        utterance.voice = AVSpeechSynthesisVoice(identifier: identifier)
-        utterance.rate = 0.54
-        synthesizer.speak(utterance)
+        player?.pause()
+        player = AVPlayer(url: url)
+        player?.play()
     }
 }
 

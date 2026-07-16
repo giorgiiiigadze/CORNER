@@ -33,16 +33,18 @@ actor SpeechAnalyzerRecognizer: VoiceRecognizer {
         }
     }
 
+    /// The line the cornerman is saying right now, or nil when he's quiet.
+    ///
     /// Read from the realtime audio thread, so it cannot live in actor state.
-    private final class MuteFlag: Sendable {
-        private let lock = OSAllocatedUnfairLock(initialState: false)
-        var isMuted: Bool { lock.withLock { $0 } }
-        func set(_ value: Bool) { lock.withLock { $0 = value } }
+    private final class SpokenLine: Sendable {
+        private let lock = OSAllocatedUnfairLock<String?>(initialState: nil)
+        var current: String? { lock.withLock { $0 } }
+        func set(_ value: String?) { lock.withLock { $0 = value } }
     }
 
     private let locale: Locale
     private let engine = AVAudioEngine()
-    private let muteFlag = MuteFlag()
+    private let spokenLine = SpokenLine()
     private let log = Logger(subsystem: "Giorgi.Corner", category: "voice")
 
     private var analyzer: SpeechAnalyzer?
@@ -59,14 +61,18 @@ actor SpeechAnalyzerRecognizer: VoiceRecognizer {
     private let commandStream: AsyncStream<VoiceCommand>
     private let transcriptContinuation: AsyncStream<String>.Continuation
     private let transcriptStream: AsyncStream<String>
+    private let unhandledContinuation: AsyncStream<String>.Continuation
+    private let unhandledStream: AsyncStream<String>
 
     var commands: AsyncStream<VoiceCommand> { commandStream }
     var transcripts: AsyncStream<String> { transcriptStream }
+    var unhandled: AsyncStream<String> { unhandledStream }
 
     init(locale: Locale = Locale.current) {
         self.locale = locale
         (commandStream, commandContinuation) = AsyncStream.makeStream(of: VoiceCommand.self)
         (transcriptStream, transcriptContinuation) = AsyncStream.makeStream(of: String.self)
+        (unhandledStream, unhandledContinuation) = AsyncStream.makeStream(of: String.self)
     }
 
     // MARK: - Lifecycle
@@ -144,11 +150,12 @@ actor SpeechAnalyzerRecognizer: VoiceRecognizer {
 
         commandContinuation.finish()
         transcriptContinuation.finish()
+        unhandledContinuation.finish()
         log.info("Recognizer stopped")
     }
 
-    func setMuted(_ muted: Bool) {
-        muteFlag.set(muted)
+    func setSpeaking(_ line: String?) {
+        spokenLine.set(line)
     }
 
     // MARK: - Model
@@ -161,10 +168,20 @@ actor SpeechAnalyzerRecognizer: VoiceRecognizer {
         let transcriber = SpeechTranscriber(
             locale: supported,
             transcriptionOptions: [],
-            // `.fastResults` is the obvious tuning knob if commands feel laggy in a
-            // gym; it trades accuracy for latency, and a false `.endSession` costs
-            // more than a slow one, so it stays off until measured.
-            reportingOptions: [.volatileResults],
+            // All three, and they're a set — each one alone is a bad trade.
+            //
+            // `.fastResults` biases toward responsiveness at the cost of
+            // accuracy; without it a command takes over a second to register,
+            // which reads as being ignored. `.alternativeTranscriptions` is what
+            // makes that affordable: the transcriber ranks several candidates,
+            // and when the fast guess is junk ("escape" for "skip") the word
+            // actually said is usually sitting right behind it — see
+            // `command(in:)`. `.volatileResults` reports before finalizing.
+            //
+            // Ran fast-without-alternatives first (fast, misheard everything),
+            // then alternatives-without-fast (accurate, sluggish). The speed and
+            // the net belong together.
+            reportingOptions: [.volatileResults, .fastResults, .alternativeTranscriptions],
             attributeOptions: []
         )
 
@@ -193,28 +210,50 @@ actor SpeechAnalyzerRecognizer: VoiceRecognizer {
 
     private func startCapturing(into analysisFormat: AVAudioFormat) throws {
         let input = engine.inputNode
-        let captureFormat = input.outputFormat(forBus: 0)
 
+        // Hardware echo cancellation: subtracts what the device is playing from
+        // what the mic hears. It's why Siri can listen while it talks, and it's
+        // what lets the cornerman be interrupted mid-combo instead of the app
+        // deafening itself every time it speaks.
+        //
+        // Must happen before `engine.start()` — the header is explicit that it
+        // can only be toggled while the engine is stopped. Failure is survivable:
+        // `say(_:)` still mutes for lines that could trigger the app itself, so a
+        // phone without voice processing degrades to the old behaviour rather
+        // than to a session that obeys its own voice.
+        do {
+            try input.setVoiceProcessingEnabled(true)
+            log.info("Echo cancellation on — the mic can hear you over the cornerman")
+        } catch {
+            log.warning("No echo cancellation: \(error.localizedDescription, privacy: .public)")
+        }
+
+        // Read *after* enabling voice processing: turning it on can change the
+        // node's format, and a converter built from the old one would produce
+        // garbage.
+        let captureFormat = input.outputFormat(forBus: 0)
         guard captureFormat.sampleRate > 0 else { throw Failure.noCompatibleAudioFormat }
 
         let converter = AVAudioConverter(from: captureFormat, to: analysisFormat)
         let continuation = inputContinuation
-        let muteFlag = self.muteFlag
 
         input.installTap(onBus: 0, bufferSize: 4096, format: captureFormat) { buffer, _ in
             // Realtime audio thread. No actor hops, no allocation beyond the
             // conversion buffer, no logging.
-            guard !muteFlag.isMuted else { return }
+            //
+            // Every buffer goes through, including while the cornerman is talking.
+            // Dropping them here is what made him impossible to interrupt: the
+            // fighter's voice was thrown away before anything could recognize it.
+            // Telling him apart from the speaker is a decision about *words*, so
+            // it belongs where the words are — see the echo check in `results`.
             guard let converter,
                   let converted = Self.convert(buffer, using: converter, to: analysisFormat)
             else { return }
 
-            // Deliberately no `bufferStartTime`. Muting drops buffers, so the stream
-            // does contain gaps, and the timestamped initializer exists for exactly
-            // that — but the mic's clock starts at an arbitrary host value, and
-            // handing the analyzer a stream that begins hours in is a risk with no
-            // payoff here. Treating the audio as contiguous only means words either
-            // side of a gap may merge, which no command phrase depends on.
+            // Deliberately no `bufferStartTime`. The mic's clock starts at an
+            // arbitrary host value, and handing the analyzer a stream that begins
+            // hours in is a risk with no payoff. The stream is unbroken now, so
+            // there are no gaps for a timestamp to describe anyway.
             continuation?.yield(AnalyzerInput(buffer: converted))
         }
 
@@ -256,16 +295,43 @@ actor SpeechAnalyzerRecognizer: VoiceRecognizer {
 
         let text = String(result.text.characters)
 
-        // Published before any filtering, so the screen shows what was heard even
-        // when it parses to nothing or repeats — that distinction is the whole
-        // point of the instrument.
+        // The cornerman's own voice coming back in through the microphone.
+        //
+        // Dropped here, ahead of everything — the screen, the twelve commands,
+        // the network — because an echo must not read as a person. It reaches
+        // this far at all so that everything *else* said while he talks can get
+        // through, which is what lets him be interrupted.
+        //
+        // Logged rather than silently swallowed: how much leaks past hardware
+        // echo cancellation is precisely the number that says whether this holds
+        // up in a real room, and there's no other way to see it.
+        if let line = spokenLine.current, CommandParser.isEcho(text, of: line) {
+            log.debug("Echo ignored: \(text, privacy: .public)")
+            return
+        }
+
+        // Published before any further filtering, so the screen shows what was
+        // heard even when it parses to nothing or repeats — that distinction is
+        // the whole point of the instrument.
         if !text.trimmingCharacters(in: .whitespaces).isEmpty {
             transcriptContinuation.yield(text)
         }
 
         let end = result.range.end
         guard end > consumedThrough else { return }
-        guard let command = CommandParser.parse(text) else { return }
+
+        guard let command = self.command(in: result) else {
+            // Not one of the twelve. It might still be something worth answering
+            // — "give me something for the body" — so hand it up rather than
+            // dropping it. Gated because each one is a network call and money:
+            // finalized only (a half-heard "give me some…" is worth nothing),
+            // and at least two words (grunts and stray syllables aren't speech).
+            if result.isFinal, isWorthInterpreting(text) {
+                consumedThrough = end
+                unhandledContinuation.yield(text)
+            }
+            return
+        }
 
         // Ending the session is the one irreversible command, so it alone waits for
         // a finalized transcript. Everything else is cheap to get wrong and
@@ -275,6 +341,41 @@ actor SpeechAnalyzerRecognizer: VoiceRecognizer {
         consumedThrough = end
         log.debug("Heard \(text, privacy: .public) -> \(command.rawValue, privacy: .public)")
         commandContinuation.yield(command)
+    }
+
+    /// Looks for a command in the transcriber's best guess, then in its
+    /// runner-ups.
+    ///
+    /// Speech recognition doesn't produce *an* answer, it produces a ranked list
+    /// and we were only ever reading the top of it. In a gym the winner is often
+    /// junk while the word actually said sits second: "skip" comes back as
+    /// "escape", and "skip" is right there behind it.
+    ///
+    /// Only consulted when the winner parses to nothing, so a clearly-heard
+    /// command is never second-guessed by a lower-ranked one. Capped at a few
+    /// candidates: the further down the list, the less it resembles what was
+    /// said, and every extra guess is another chance to fire a command nobody
+    /// asked for.
+    private func command(in result: SpeechTranscriber.Result) -> VoiceCommand? {
+        if let command = CommandParser.parse(String(result.text.characters)) {
+            return command
+        }
+        return result.alternatives
+            .prefix(3)
+            .lazy
+            .compactMap { CommandParser.parse(String($0.characters)) }
+            .first
+    }
+
+    /// Cheap gate before spending a network call on a transcript.
+    ///
+    /// Two words minimum: "uh", "hah", a grunt between punches, and the mic
+    /// catching a single word off a passing conversation are all noise, and the
+    /// cornerman has nothing useful to say about them.
+    private func isWorthInterpreting(_ text: String) -> Bool {
+        CommandParser.normalize(text)
+            .split(separator: " ")
+            .count >= 2
     }
 
     private func log(error: Error) {

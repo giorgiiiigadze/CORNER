@@ -22,7 +22,21 @@ nonisolated struct Round: Codable, Sendable, Identifiable {
     let durationSeconds: Int
     let restSeconds: Int
     let combos: [Combo]
-    /// Spoken during the rest that follows this round. M3 replaces this with Claude.
+
+    /// Two or three short corrections, dropped between combos and repeated all
+    /// round: "Hands up." "Chin." "Turn it over."
+    ///
+    /// Not a claim to have seen anything — the app has no camera. These are the
+    /// drill. A corner says "hands up" on a rhythm through a round whether or not
+    /// the hands just dropped, because the repetition is the point: it stops
+    /// being an instruction and becomes a reflex. That works blind, and it's the
+    /// difference between coaching and reading combos off a list.
+    ///
+    /// Deliberately few. You cannot fix five things at once, and a fighter
+    /// thinking about five things is thinking about none of them.
+    let cues: [String]
+
+    /// Spoken during the rest that follows this round.
     let cornerTalk: String?
 
     var duration: TimeInterval { TimeInterval(durationSeconds) }
@@ -32,6 +46,10 @@ nonisolated struct Round: Codable, Sendable, Identifiable {
 nonisolated struct Session: Codable, Sendable, Identifiable {
     let id: String
     let title: String
+    /// What the coach says before round one — what today is about and the one
+    /// thing to hold onto. Without it the app is a timer with a vocabulary:
+    /// it calls combos at you with no reason for any of them.
+    let intro: String?
     let rounds: [Round]
 }
 
@@ -45,11 +63,23 @@ nonisolated struct Tempo: Sendable, Equatable {
 
     static let `default` = Tempo(gap: 3.5)
 
-    private static let range: ClosedRange<TimeInterval> = 1.5...7.0
-    private static let step: TimeInterval = 0.75
+    /// The floor is low on purpose. What a person feels is the *cycle* — roughly
+    /// two seconds of spoken combo plus this gap — so a 1.5s floor meant the
+    /// fastest possible pace was still a combo every 3.5 seconds. That isn't a
+    /// flurry, and no amount of asking could get one.
+    private static let range: ClosedRange<TimeInterval> = 0.5...7.0
 
-    mutating func slower() { gap = min(Self.range.upperBound, gap + Self.step) }
-    mutating func faster() { gap = max(Self.range.lowerBound, gap - Self.step) }
+    /// Scaled, not fixed.
+    ///
+    /// A flat ±0.75s step is perceptually wrong: it's a huge change down at 1s
+    /// and nothing at all up at 7s. Worse, one step from the 3.5s default moved
+    /// the cycle by ~14% — under the threshold of noticing, which is exactly why
+    /// "faster" felt like it did nothing. A multiplier makes every step the same
+    /// *proportional* change, and the first one is a ~30% cut.
+    private static let scale: Double = 0.7
+
+    mutating func slower() { gap = min(Self.range.upperBound, gap / Self.scale) }
+    mutating func faster() { gap = max(Self.range.lowerBound, gap * Self.scale) }
 
     var isSlowest: Bool { gap >= Self.range.upperBound }
     var isFastest: Bool { gap <= Self.range.lowerBound }

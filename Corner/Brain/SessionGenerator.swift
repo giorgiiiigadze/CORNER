@@ -7,6 +7,10 @@ nonisolated struct TrainingProfile: Sendable, Codable, Equatable {
         case beginner, intermediate, advanced
     }
 
+    /// Where the user's self-declared level lives. The one thing about them the
+    /// app can't observe from a session, so it's the one thing Settings asks.
+    static let levelKey = "trainingLevel"
+
     var level: Level = .beginner
     /// Round focuses from recent sessions, newest first. Keeps session 20 from
     /// being session 1 — the whole reason this feature exists.
@@ -88,6 +92,48 @@ nonisolated struct SessionGenerator: Sendable {
         return PlannedSession(session: session, origin: .bundled(reason: reason))
     }
 
+    /// Drops sentences that report on a fighter nobody watched.
+    ///
+    /// The prompt forbids these at length and the model writes them anyway —
+    /// "You're chaining them now" — because it knows what a corner sounds like,
+    /// and a real corner watches. A prompt is a request; this is the guarantee,
+    /// for the same reason `distinct` exists.
+    ///
+    /// Narrow on purpose, and it only ever deletes. A talk mangled into nonsense
+    /// would be worse than one that overclaims, and what's left after a cut is
+    /// the forward-facing half — the part worth hearing anyway.
+    static func withoutSightClaims(_ talk: String) -> String {
+        let text = talk as NSString
+        var kept: [String] = []
+        text.enumerateSubstrings(
+            in: NSRange(location: 0, length: text.length),
+            options: .bySentences
+        ) { sentence, _, _, _ in
+            guard let sentence else { return }
+            guard !claimsSight(sentence) else { return }
+            kept.append(sentence.trimmingCharacters(in: .whitespaces))
+        }
+        return kept.joined(separator: " ")
+    }
+
+    /// "You're …ing" is the tell: the model narrating a round it did not see.
+    private static func claimsSight(_ sentence: String) -> Bool {
+        let lowered = sentence.lowercased().trimmingCharacters(in: .whitespaces)
+        let openers = ["you're ", "you are ", "you've ", "you look "]
+        guard let opener = openers.first(where: { lowered.hasPrefix($0) }) else { return false }
+
+        // "You've been working the jab all week" is history we actually have.
+        if opener == "you've " { return false }
+
+        // A participle in the first few words is what makes it a report of the
+        // present. "You're going to feel this" is a promise about the next round,
+        // not a claim about this one, and it's the one common false match.
+        return lowered.dropFirst(opener.count)
+            .split(separator: " ")
+            .prefix(3)
+            .contains { $0.hasSuffix("ing") && $0 != "going" }
+    }
+
     // MARK: - Prompt
 
     /// The cornerman.
@@ -106,8 +152,12 @@ nonisolated struct SessionGenerator: Sendable {
         Defensive beats — slip, roll, pivot, step — are combined freely with punches.
 
         Each combo has two forms and they are not interchangeable:
-        - display: numbers for the screen, separated by " - " and nothing else. \
-        "1 - 2 - 3b". Never commas, never words.
+        - display: for the screen, read across a room at a glance. Every beat \
+        separated by " - " and nothing else: "1 - 2 - 3b", "slip - 1 - 2", \
+        "1 - slip - 2 - 3b". Punches are always digits, never words — "jab - 2" \
+        is wrong, "1 - 2" is right. Defensive beats are the one exception and are \
+        spelled out, because they have no number: slip, roll, pivot, step. Never \
+        commas.
         - spoken: what the voice says out loud. A speech synthesizer reads this \
         literally, so "1-2" has to be written "one, two" or it comes out as a phone \
         number. Those commas are the rhythm — they become the pauses the fighter \
@@ -122,12 +172,61 @@ nonisolated struct SessionGenerator: Sendable {
         that list, so a short list or a repeated entry is one the fighter hears \
         over and over until the round stops sounding like coaching.
 
-        Corner talk is 15 seconds spoken during the rest — the most valuable 15 \
-        seconds in the sport. A real corner gives one specific correction of \
-        something they just saw, and one thing to do about it in the next round. \
-        Not "great work, keep it up". Something like "You're dropping the right \
-        hand coming back from the hook. Next round I want it glued to your chin." \
-        Write in the coach's voice, second person, out loud. No lists, no preamble.
+        First, the hard constraint, because it cuts against everything you know \
+        about coaching.
+
+        You cannot see the fighter. There is no camera. You are writing this \
+        before they have thrown a single punch, so you do not know whether their \
+        hands are up, whether the jab was lazy, or how the last round went. There \
+        was no last round yet.
+
+        So never write a line that reports on them. Not "you're dropping your \
+        right hand", not "you're slipping clean", not "that jab is snapping now", \
+        not "you're getting tired". Every one of those is a guess, and the first \
+        one that's wrong — they were slipping badly, and you said it looked clean \
+        — tells them you aren't watching. After that, every true thing you say \
+        reads as a guess too. It is the one mistake here you cannot take back.
+
+        The tell is the word "you're" followed by what they're doing. If a line \
+        has it, delete the line.
+
+        This costs you less than it sounds. Face forward instead of backward: a \
+        corner is most useful about the round that hasn't happened. "Next round \
+        we chain them, don't rush the slip" needs no camera and is worth more \
+        than any commentary on the round just finished. Talk about the plan, the \
+        work, and what they've told you. Your authority comes from attention, not \
+        from narrating.
+
+        Now the voice, which matters more than any of the above.
+
+        Economy. Every word earns its place. Real boxing coaching is terse to the \
+        point of sounding cryptic to outsiders — single cues dropped into the \
+        rhythm of the work, not speeches. "Hands up." "Chin." "Turn it over." \
+        "There it is." "Again." The authority is in the calm, never the volume. \
+        Warm, and completely unwilling to let anything slide. Not a cheerleader, \
+        not a drill sergeant.
+
+        One thing at a time. You cannot fix five things at once, and a fighter \
+        thinking about five things is thinking about none of them.
+
+        The intro is two sentences. What today is for, and the one thing to hold \
+        onto. If they've been working on something recently, connect today to it. \
+        Don't greet them, don't list the rounds, don't explain the notation. Say \
+        the plan and get out of the way.
+
+        Cues are the round's two or three corrections, and they are the heart of \
+        this. Three to five words each, tied to that round's focus: "Hands up." \
+        "Chin down." "Turn the hip over." "Snap it back." They get repeated all \
+        round, on purpose — repetition is how an instruction becomes a reflex. So \
+        write them to survive being heard eight times. No sentences, no \
+        explanations, no variety for its own sake. Two or three. Not five.
+
+        Corner talk is 15 seconds spoken during the rest, and it points forward, \
+        never back. Say what the next round is and the one thing to hold onto in \
+        it. "Next round is the same jab, just faster. Don't let it get lazy when \
+        you're tired." That needs no camera. Not "great work, keep it up", and \
+        not a report on the round they just finished — you didn't see it. Second \
+        person, out loud, no lists, no preamble.
         """
 
     private static func userPrompt(for request: SessionRequest) -> String {
@@ -173,18 +272,22 @@ nonisolated struct SessionGenerator: Sendable {
     private static let schema: [String: Any] = [
         "type": "object",
         "additionalProperties": false,
-        "required": ["title", "rounds"],
+        "required": ["title", "intro", "rounds"],
         "properties": [
             "title": [
                 "type": "string",
                 "description": "Two or three words. 'Power day', 'Sharpen the jab'.",
+            ],
+            "intro": [
+                "type": "string",
+                "description": "Spoken before the first bell, ~15 seconds. What today is for and the one thing to hold onto throughout. Two or three sentences, no greeting, no list.",
             ],
             "rounds": [
                 "type": "array",
                 "items": [
                     "type": "object",
                     "additionalProperties": false,
-                    "required": ["focus", "combos", "cornerTalk"],
+                    "required": ["focus", "combos", "cues", "cornerTalk"],
                     "properties": [
                         "focus": [
                             "type": "string",
@@ -211,15 +314,28 @@ nonisolated struct SessionGenerator: Sendable {
                                 ],
                             ],
                         ],
+                        "cues": [
+                            "type": "array",
+                            "items": ["type": "string"],
+                            "description": "Two or three corrections for this round, three to five words each: 'Hands up.' 'Turn the hip over.' Repeated between combos all round, so write them to survive being heard eight times. Never claims about what the fighter is doing — there is no camera.",
+                        ],
                         "cornerTalk": [
                             "type": "string",
-                            "description": "~15 seconds spoken during the rest after this round: one specific correction, one instruction for the next round.",
+                            "description": "~15 seconds spoken during the rest after this round: one thing to carry into the next round, drawn from the plan. Never an observation — there is no camera.",
                         ],
                     ],
                 ],
             ],
         ],
     ]
+}
+
+private extension String {
+    /// Nil when there's nothing left to say, so callers can't hand a synthesizer
+    /// an empty line to read.
+    var ifNotEmpty: String? {
+        trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : self
+    }
 }
 
 // MARK: - Wire types
@@ -230,10 +346,12 @@ private nonisolated struct GeneratedSession: Decodable {
     nonisolated struct GeneratedRound: Decodable {
         let focus: String
         let combos: [Combo]
+        let cues: [String]
         let cornerTalk: String
     }
 
     let title: String
+    let intro: String
     let rounds: [GeneratedRound]
 
     /// Drops repeated combos, keeping the first of each and the round's order.
@@ -251,6 +369,7 @@ private nonisolated struct GeneratedSession: Decodable {
         Session(
             id: UUID().uuidString,
             title: title,
+            intro: intro,
             rounds: rounds.enumerated().map { index, round in
                 let isLast = index == rounds.count - 1
                 return Round(
@@ -260,7 +379,15 @@ private nonisolated struct GeneratedSession: Decodable {
                     // The last round has nothing to rest for.
                     restSeconds: isLast ? 0 : restSeconds,
                     combos: Self.distinct(round.combos),
-                    cornerTalk: isLast ? nil : round.cornerTalk
+                    // Three at most. The prompt asks for two or three, but a
+                    // prompt is a request — and a round that cycles six cues
+                    // teaches none of them, which is the one thing cues exist
+                    // to do.
+                    cues: Array(round.cues.prefix(3)),
+                    // Nil rather than empty when every sentence claimed sight:
+                    // a silent rest is honest, and an empty string would be sent
+                    // to the synthesizer as a line to read.
+                    cornerTalk: isLast ? nil : SessionGenerator.withoutSightClaims(round.cornerTalk).ifNotEmpty
                 )
             }
         )

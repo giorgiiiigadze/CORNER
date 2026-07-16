@@ -1,15 +1,17 @@
 import AVFoundation
 
-/// The voices actually installed on this phone.
+/// The iOS voices installed on this phone.
 ///
-/// The important thing this file encodes: iOS ships only the **compact** voice
-/// by default, and compact is what makes text-to-speech sound like a robot.
-/// Enhanced and Premium sound like a person — but Apple downloads them on the
-/// user's request only, and there is no API to trigger it. An app can detect
-/// their absence and say so; it cannot fix it silently.
+/// Emergency plumbing only. The cornerman is an ElevenLabs voice; this is what
+/// speaks when the network dies mid-round, because a robot calling "one, two"
+/// beats a silent round in a garage with no signal.
+///
+/// Nothing here is user-facing any more — Settings offers only real voices —
+/// so this picks the best available on its own.
 nonisolated enum VoiceCatalog {
 
-    /// Where the chosen voice is stored. `Cornerman` reads this at init.
+    /// Kept so an existing stored choice is still honoured, but nothing writes
+    /// it any more.
     static let preferenceKey = "cornerVoiceIdentifier"
 
     nonisolated struct Entry: Identifiable, Sendable, Hashable {
@@ -50,6 +52,7 @@ nonisolated enum VoiceCatalog {
 
         return AVSpeechSynthesisVoice.speechVoices()
             .filter { $0.language.hasPrefix(prefix) }
+            .filter { !isNovelty($0) }
             .map { voice in
                 let tier: Entry.Tier = switch voice.quality {
                 case .premium: .premium
@@ -63,8 +66,16 @@ nonisolated enum VoiceCatalog {
             }
     }
 
-    /// True when the phone has nothing but robots installed — the case worth
-    /// telling the user about, since only they can fix it.
+    /// iOS ships a set of joke voices — Albert, Bad News, Bahh, Bells, Boing,
+    /// Bubbles — alongside the real ones. They're indistinguishable by quality
+    /// (all report `.default`), so they have to be excluded by identifier.
+    /// A cornerman that sounds like "Boing" is worse than no fallback at all.
+    private static func isNovelty(_ voice: AVSpeechSynthesisVoice) -> Bool {
+        voice.identifier.contains("speech.synthesis.voice")
+            || voice.identifier.contains("eloquence")
+    }
+
+    /// True when the phone has nothing but robots installed.
     static var needsBetterVoiceDownload: Bool {
         !installed().contains { $0.quality > .compact }
     }

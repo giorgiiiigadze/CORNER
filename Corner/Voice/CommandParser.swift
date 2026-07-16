@@ -29,7 +29,13 @@ nonisolated enum CommandParser {
 
         ("again", .again), ("repeat", .again), ("one more time", .again),
 
+        // "escape" is not a thing anyone says to a heavy bag — it's what the
+        // recognizer hears when you say "skip". Mishearings observed in real use
+        // are cheaper to accept than to fight, and adding them here also biases
+        // the recognizer toward them via `contextualStrings`, so the mistake
+        // becomes a reliable one.
         ("skip", .skip), ("skip it", .skip), ("next combo", .skip),
+        ("escape", .skip), ("skipped", .skip),
 
         ("next round", .nextRound), ("next", .nextRound),
 
@@ -86,6 +92,44 @@ nonisolated enum CommandParser {
         }
 
         return best?.command
+    }
+
+    /// Whether `heard` is just the app listening to itself.
+    ///
+    /// The microphone picks up the speaker. Hardware echo cancellation removes
+    /// most of it, but not reliably enough to bet the session on: a leaked
+    /// "next round" from corner talk would skip a round the fighter is still in.
+    ///
+    /// The app closed the mic entirely while it spoke, which was airtight and
+    /// also meant it couldn't be interrupted for the thirty seconds of the intro.
+    /// This is the trade that buys that back — the app knows its own script, so
+    /// it can discard its own words and still hear a voice in the room.
+    ///
+    /// Deliberately generous about what counts as an echo. A missed barge-in is
+    /// a beat of talking over someone; a false one is the session obeying a
+    /// command nobody gave.
+    static func isEcho(_ heard: String, of spoken: String) -> Bool {
+        let heardWords = normalize(heard).split(separator: " ")
+        // No words at all, so nothing to attribute to anyone. Calling this an
+        // echo is what stops every silence between two words from reading as
+        // someone speaking.
+        guard !heardWords.isEmpty else { return true }
+
+        let haystack = normalize(spoken)
+
+        // Every word has to come from the script. One that doesn't means someone
+        // else is talking, which is the only thing worth acting on.
+        //
+        // Word-wise rather than a contiguous match, because echo cancellation
+        // strips the line unevenly: what comes back is the cornerman's words with
+        // holes in them ("next round … snap it"), never a clean run.
+        return heardWords.enumerated().allSatisfy { index, word in
+            // Only the last word may be a fragment — volatile results arrive
+            // mid-word, "rou" on the way to "round". Allowing it anywhere else
+            // would let "go" match "going" in the middle of a real sentence.
+            let isLast = index == heardWords.count - 1
+            return haystack.contains(isLast ? " \(word)" : " \(word) ")
+        }
     }
 
     /// Everything the recognizer should be biased toward hearing.

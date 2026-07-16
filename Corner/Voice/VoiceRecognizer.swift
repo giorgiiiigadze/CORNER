@@ -31,10 +31,24 @@ nonisolated protocol VoiceRecognizer: Sendable {
     /// "it didn't work" is unfalsifiable.
     var transcripts: AsyncStream<String> { get async }
 
+    /// Things said that the twelve commands don't cover — "give me something for
+    /// the body", "my shoulder hurts".
+    ///
+    /// Everything on this stream costs a network round-trip and real money, so
+    /// it's gated hard: finalized results only, never half-heard volatile ones,
+    /// and never a single stray word. The twelve never appear here — they're
+    /// answered on-device and instantly, and must stay that way.
+    var unhandled: AsyncStream<String> { get async }
+
     func start() async throws
     func stop() async
 
-    /// Suspends recognition while the cornerman is speaking, so the app
-    /// doesn't hear its own callouts and obey itself.
-    func setMuted(_ muted: Bool) async
+    /// Tells the recognizer what the cornerman is saying right now, or nil when
+    /// he's quiet.
+    ///
+    /// Not a mute. Recognition keeps running throughout — the recognizer uses the
+    /// line to discard the app's own voice arriving back through the microphone,
+    /// while still hearing everything else. That's the difference between a coach
+    /// you can interrupt and one who talks until he's finished.
+    func setSpeaking(_ line: String?) async
 }

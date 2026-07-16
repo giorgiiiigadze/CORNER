@@ -11,7 +11,17 @@
 
 	     The key lands in the app bundle in plain text and can be extracted from
 	     the .ipa. Fine on your own device; a ship-blocker for public TestFlight. -->
+	<!-- The phone is across the room, screen off, in a bag or a pocket. Without
+	     this, iOS suspends the app the moment it backgrounds and the workout
+	     stops mid-round. `audio` keeps the session, the callouts and the
+	     microphone alive with the screen locked. -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
 	<key>ANTHROPIC_API_KEY</key>
 	<string>$(ANTHROPIC_API_KEY)</string>
+	<key>ELEVENLABS_API_KEY</key>
+	<string>$(ELEVENLABS_API_KEY)</string>
 </dict>
 </plist>

@@ -13,6 +13,24 @@ nonisolated protocol Voice: Sendable {
     /// Cuts a line off mid-word. "Pause" has to freeze mid-combo, so callouts can
     /// never be fire-and-forget.
     func cancel() async
+    /// A batch of lines that will be needed soon.
+    ///
+    /// This is the seam that makes a cloud voice usable in a live round: the
+    /// session is known ahead of time, so audio can be fetched during the slack
+    /// — round one while the user wraps their hands, round N+1 while they work
+    /// round N. On-device voices ignore it.
+    func prewarm(_ lines: [String]) async
+
+    /// Stop fetching anything not yet needed. Called when a session ends, so an
+    /// abandoned workout doesn't keep paying for rounds nobody will hear.
+    func stopPrewarming() async
+}
+
+extension Voice {
+    /// `Cornerman` synthesizes locally and instantly — nothing to warm, and so
+    /// nothing to stop.
+    func prewarm(_ lines: [String]) async {}
+    func stopPrewarming() async {}
 }
 
 @MainActor

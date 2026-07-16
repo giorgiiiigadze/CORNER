@@ -88,4 +88,39 @@ struct CommandParserTests {
     func staysSilentWhenNoCommandIsPresent(input: String) {
         #expect(CommandParser.parse(input) == nil)
     }
+
+    // MARK: - Echo
+
+    /// The app hearing itself. Corner talk that says "next round" must not skip
+    /// the round the fighter is standing in.
+    @Test(arguments: [
+        "next round",             // the danger case: a real command in the script
+        "Next round",             // recognizers don't promise casing
+        "round we start",         // caught mid-line, as the speaker bleeds in
+        "next rou",               // volatile results arrive mid-word
+        "NEXT ROUND, SNAP IT",
+    ])
+    func recognizesItsOwnVoice(heard: String) {
+        #expect(CommandParser.isEcho(heard, of: "Next round we start on the jab. Snap it back."))
+    }
+
+    /// The other half, and the one that matters more: a fighter talking over the
+    /// cornerman must still get through. If this fails, the app is deaf whenever
+    /// it's speaking — which is the whole bug this replaced.
+    @Test(arguments: [
+        "pause",
+        "give me something for the body",
+        "my shoulder hurts",
+        "faster",
+    ])
+    func doesNotMistakeTheFighterForItself(heard: String) {
+        #expect(!CommandParser.isEcho(heard, of: "Next round we start on the jab. Snap it back."))
+    }
+
+    /// Empty is nobody. Yielding it would cut the cornerman off at every pause
+    /// between words.
+    @Test(arguments: ["", "   ", "!"])
+    func treatsSilenceAsEcho(heard: String) {
+        #expect(CommandParser.isEcho(heard, of: "Round two. Body work."))
+    }
 }

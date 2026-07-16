@@ -11,8 +11,22 @@ struct LiveSessionView: View {
     @State private var startupError: String?
     @Environment(\.dismiss) private var dismiss
 
-    init(engine: SessionEngine) {
+    /// Called once, with what actually happened, on the way out.
+    private let onFinish: (SessionSummary) -> Void
+
+    init(engine: SessionEngine, onFinish: @escaping (SessionSummary) -> Void) {
         _engine = State(initialValue: engine)
+        self.onFinish = onFinish
+    }
+
+    /// Runs whether they said "end session", tapped End, or finished the last
+    /// round — a session only teaches the cornerman something if it's recorded
+    /// on every exit, not just the tidy one.
+    private func finish() async {
+        let summary = engine.summary
+        await engine.end()
+        onFinish(summary)
+        dismiss()
     }
 
     var body: some View {
@@ -29,10 +43,19 @@ struct LiveSessionView: View {
         }
         .cornerBackground(resting: engine.isResting)
         .preferredColorScheme(.dark)
-        // The whole premise is that you can't touch this. Letting it sleep would
-        // end the workout for you.
         .persistentSystemOverlays(.hidden)
         .task { await startListening() }
+        // The premise is that you never touch the phone — which means iOS never
+        // sees a touch, and locks the screen out from under a running workout.
+        // Held only for the session, never app-wide.
+        .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
+        .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
+        // Catches every exit that isn't the End button: "end session", or the
+        // last round finishing on its own.
+        .onChange(of: engine.isFinished) { _, finished in
+            guard finished else { return }
+            Task { await finish() }
+        }
         .alert("Can't hear you", isPresented: .constant(startupError != nil)) {
             Button("OK") { dismiss() }
         } message: {
@@ -102,10 +125,7 @@ struct LiveSessionView: View {
             }
             Spacer()
             Button("End") {
-                Task {
-                    await engine.end()
-                    dismiss()
-                }
+                Task { await finish() }
             }
             .font(.footnote.weight(.medium))
             .foregroundStyle(Theme.Palette.secondaryText)
