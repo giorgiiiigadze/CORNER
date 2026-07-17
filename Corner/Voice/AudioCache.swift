@@ -4,10 +4,17 @@ import os
 
 /// Audio we've already paid for, kept on disk.
 ///
-/// This is what makes cloud voices affordable. Combos repeat forever — "one,
-/// two" is the same audio this week and next year — so each one is synthesized
-/// once and replayed for free from then on. Corner talk is unique every time
-/// and never hits, which is correct: it's the part actually worth paying for.
+/// The economics inverted when the combo callouts went. This existed because
+/// combos repeat forever — "one, two" is the same audio this week and next year
+/// — so thirty-five callouts a round cost nothing after the first session. There
+/// are no callouts, and almost everything the cornerman says now is unique to the
+/// session that produced it.
+///
+/// What still hits is the fixed lines: the two endings, and the ~180 possible
+/// answers to "how much time". Those are identical in every session forever, so
+/// they cost one fetch each, ever. It's a much smaller saving than it was — but
+/// it's also a much smaller bill, roughly five cents a session against a
+/// per-round one.
 ///
 /// Lives in Caches, so iOS may evict it under storage pressure. That's fine —
 /// a miss costs a re-fetch, not a broken session.
