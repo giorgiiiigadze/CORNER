@@ -48,6 +48,8 @@ private actor FakeRecognizer: VoiceRecognizer {
     private let continuation: AsyncStream<VoiceCommand>.Continuation
     private let transcriptStream: AsyncStream<String>
     private let transcriptContinuation: AsyncStream<String>.Continuation
+    private let unmatchedStream: AsyncStream<String>
+    private let unmatchedContinuation: AsyncStream<String>.Continuation
 
     /// Every line the engine announced it was saying, nils included — the nils
     /// are what prove the echo filter is lowered again afterwards.
@@ -58,16 +60,19 @@ private actor FakeRecognizer: VoiceRecognizer {
     init() {
         (stream, continuation) = AsyncStream.makeStream(of: VoiceCommand.self)
         (transcriptStream, transcriptContinuation) = AsyncStream.makeStream(of: String.self)
+        (unmatchedStream, unmatchedContinuation) = AsyncStream.makeStream(of: String.self)
     }
 
     var commands: AsyncStream<VoiceCommand> { stream }
     var transcripts: AsyncStream<String> { transcriptStream }
+    var unmatched: AsyncStream<String> { unmatchedStream }
 
     func start() async throws { didStart = true }
     func stop() async {
         didStop = true
         continuation.finish()
         transcriptContinuation.finish()
+        unmatchedContinuation.finish()
     }
     func setSpeaking(_ line: String?) async { spokenLines.append(line) }
 
@@ -76,6 +81,25 @@ private actor FakeRecognizer: VoiceRecognizer {
 
     /// Simulates raw text arriving from the transcriber.
     func transcribe(_ text: String) { transcriptContinuation.yield(text) }
+
+    /// Simulates a finished sentence the phrase list made nothing of.
+    func say(unrecognised text: String) { unmatchedContinuation.yield(text) }
+}
+
+/// Stands in for Claude. Returns whatever it's told to, and records what it was
+/// asked — the second half is what proves the parser's hits never reach it.
+private actor FakeIntentReader: IntentReader {
+    private let reading: VoiceCommand?
+    private(set) var asked: [String] = []
+
+    init(reads reading: VoiceCommand?) {
+        self.reading = reading
+    }
+
+    func interpret(_ heard: String) async -> VoiceCommand? {
+        asked.append(heard)
+        return reading
+    }
 }
 
 /// The bell is the app's primary signal now, so "did it ring, and when" is worth
@@ -121,7 +145,9 @@ private let testSession = Session(
 @MainActor
 struct SessionEngineTests {
 
-    private func makeEngine() -> (SessionEngine, FakeVoice, FakeRecognizer, FakeBell) {
+    private func makeEngine(
+        intent: (any IntentReader)? = nil
+    ) -> (SessionEngine, FakeVoice, FakeRecognizer, FakeBell) {
         let voice = FakeVoice()
         let recognizer = FakeRecognizer()
         let bell = FakeBell()
@@ -129,6 +155,7 @@ struct SessionEngineTests {
             session: testSession,
             voice: voice,
             recognizer: recognizer,
+            intent: intent,
             ticker: GateTicker(),
             bell: bell
         )
@@ -182,6 +209,72 @@ struct SessionEngineTests {
         #expect(engine.phase == .active)
         #expect(engine.round?.index == 1)
         #expect(engine.round?.focus == "Straight punches")
+    }
+
+    // MARK: - Words the phrase list doesn't know
+
+    /// The reason this exists. "Stop" isn't in the phrase list and never will be
+    /// — the list can't be finished — but it plainly means pause, and a fighter
+    /// who says it should get one.
+    @Test func speechTheParserMissedIsReadForIntent() async throws {
+        let reader = FakeIntentReader(reads: .pause)
+        let (engine, _, recognizer, _) = makeEngine(intent: reader)
+        try await engine.beginListening()
+        await recognizer.hear(.start)
+        await settle()
+
+        await recognizer.say(unrecognised: "stop")
+
+        #expect(await eventually { engine.isPaused })
+        #expect(await reader.asked == ["stop"])
+    }
+
+    /// None of that speech was an instruction, and the session has to be able to
+    /// hear a room full of it without doing anything. This is the failure mode
+    /// that would make the feature worse than not having it.
+    @Test func speechThatMeansNothingChangesNothing() async throws {
+        let reader = FakeIntentReader(reads: nil)
+        let (engine, _, recognizer, _) = makeEngine(intent: reader)
+        try await engine.beginListening()
+        await recognizer.hear(.start)
+        await settle()
+
+        await recognizer.say(unrecognised: "im dying here")
+        await settle()
+
+        #expect(!engine.isPaused)
+        #expect(engine.phase == .active)
+    }
+
+    /// The engine's guards are the backstop for a misread. Claude saying "resume"
+    /// when nothing is paused must be as inert as a person saying it.
+    @Test func anImpossibleReadingIsIgnored() async throws {
+        let reader = FakeIntentReader(reads: .resume)
+        let (engine, _, recognizer, _) = makeEngine(intent: reader)
+        try await engine.beginListening()
+        await recognizer.hear(.start)
+        await settle()
+
+        await recognizer.say(unrecognised: "carry on then")
+        await settle()
+
+        #expect(!engine.isPaused)
+        #expect(engine.phase == .active)
+    }
+
+    /// No key, no network, no reader — and a session that behaves exactly as it
+    /// did before any of this existed.
+    @Test func withoutAReaderTheParserIsTheWholeStory() async throws {
+        let (engine, _, recognizer, _) = makeEngine(intent: nil)
+        try await engine.beginListening()
+        await recognizer.hear(.start)
+        await settle()
+
+        await recognizer.say(unrecognised: "stop")
+        await settle()
+
+        #expect(!engine.isPaused)
+        #expect(engine.phase == .active)
     }
 
     // MARK: - A sentence, then the bell
@@ -252,6 +345,14 @@ struct SessionEngineTests {
                 "\"\(line)\" parses as \(CommandParser.parse(line)?.rawValue ?? "") — the app would obey itself"
             )
         }
+    }
+
+    /// The nastiest version of the same bug. The app asks "You sure?" and then
+    /// listens for "yes" — so if its own question parses to anything, one
+    /// garbled word past the echo filter ends the session by itself, and the
+    /// fighter never said a word.
+    @Test func theQuestionIsNotAnAnswer() {
+        #expect(CommandParser.parse(SessionEngine.confirmEndLine) == nil)
     }
 
     @Test func pauseSaysSo() async throws {
@@ -448,10 +549,104 @@ struct SessionEngineTests {
         await settle()
         await recognizer.hear(.endSession)
         await settle()
+        await recognizer.hear(.confirm)
+        await settle()
 
         #expect(engine.isFinished)
         #expect(!engine.isListening)
         #expect(await recognizer.didStop)
+    }
+
+    // MARK: - The one question
+
+    /// A misheard "finish" used to end the workout outright. Now it asks, and a
+    /// session survives being misheard.
+    @Test func endingAsksFirstAndDoesNotEnd() async throws {
+        let (engine, voice, recognizer, _) = makeEngine()
+        try await engine.beginListening()
+        await recognizer.hear(.start)
+        await settle()
+        await recognizer.hear(.endSession)
+        await settle()
+
+        #expect(engine.awaitingEndConfirmation)
+        #expect(!engine.isFinished, "the session must survive the question")
+        #expect(engine.phase == .active, "and the round must keep running under it")
+        #expect(await voice.lines.contains(SessionEngine.confirmEndLine))
+    }
+
+    @Test func sayingNoKeepsTheSessionAlive() async throws {
+        let (engine, _, recognizer, _) = makeEngine()
+        try await engine.beginListening()
+        await recognizer.hear(.start)
+        await settle()
+        await recognizer.hear(.endSession)
+        await settle()
+        await recognizer.hear(.cancel)
+        await settle()
+
+        #expect(!engine.awaitingEndConfirmation)
+        #expect(!engine.isFinished)
+        #expect(engine.phase == .active)
+    }
+
+    /// Someone who means it repeats themselves rather than answering.
+    @Test func sayingItTwiceIsAlsoConfirmation() async throws {
+        let (engine, _, recognizer, _) = makeEngine()
+        try await engine.beginListening()
+        await recognizer.hear(.start)
+        await settle()
+        await recognizer.hear(.endSession)
+        await settle()
+        await recognizer.hear(.endSession)
+        await settle()
+
+        #expect(engine.isFinished)
+    }
+
+    /// "Yes" is a word people say to each other in gyms. It must be inert unless
+    /// it's answering something.
+    @Test func yesMeansNothingWhenNothingWasAsked() async throws {
+        let (engine, _, recognizer, _) = makeEngine()
+        try await engine.beginListening()
+        await recognizer.hear(.start)
+        await settle()
+        await recognizer.hear(.confirm)
+        await settle()
+
+        #expect(!engine.isFinished)
+        #expect(engine.phase == .active)
+    }
+
+    /// The stale-answer bug: ask, move on, and a "yeah" two minutes later must
+    /// not land on a question nobody remembers.
+    @Test func movingOnForgetsTheQuestion() async throws {
+        let (engine, _, recognizer, _) = makeEngine()
+        try await engine.beginListening()
+        await recognizer.hear(.start)
+        await settle()
+        await recognizer.hear(.endSession)
+        await settle()
+
+        await recognizer.hear(.timeCheck)
+        await settle()
+        #expect(!engine.awaitingEndConfirmation)
+
+        await recognizer.hear(.confirm)
+        await settle()
+        #expect(!engine.isFinished, "that yes was answering nothing")
+    }
+
+    /// Nothing to lose before the first bell, so the question would be ceremony —
+    /// and a confirmation you always say yes to is one you stop reading.
+    @Test func endingBeforeItStartsDoesNotAsk() async throws {
+        let (engine, _, recognizer, _) = makeEngine()
+        try await engine.beginListening()
+        await recognizer.hear(.endSession)
+        await settle()
+
+        #expect(!engine.awaitingEndConfirmation)
+        #expect(engine.isFinished)
     }
 
     /// An abandoned workout must stop paying for lines nobody will hear.

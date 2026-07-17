@@ -13,19 +13,12 @@ struct SessionSetupSheet: View {
 
     @Environment(\.dismiss) private var dismiss
 
-    /// Free text, because it becomes a line in a prompt. The presets cover the
-    /// common cases; the field is there for "left hook, I keep dropping it".
-    private static let presets = [
-        "Balanced", "Technique", "Power", "Conditioning", "Body work",
-        "Head movement", "Footwork", "Freestyle",
-    ]
-
     var body: some View {
         NavigationStack {
             Form {
                 Section("Today") {
                     Picker("Focus", selection: $request.focus) {
-                        ForEach(Self.presets, id: \.self) { preset in
+                        ForEach(SessionRequest.focusPresets, id: \.self) { preset in
                             Text(preset).tag(preset)
                         }
                     }
@@ -65,7 +58,6 @@ struct SessionSetupSheet: View {
             }
         }
         .presentationDetents([.medium])
-        .preferredColorScheme(.dark)
     }
 
     private var total: String {

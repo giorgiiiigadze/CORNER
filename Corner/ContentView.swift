@@ -3,110 +3,72 @@ import Speech
 import SwiftData
 import SwiftUI
 
-/// Home. Not yet the hero card the plan calls for, but no longer scaffolding:
-/// every input the cornerman sees now comes from the user or their history.
+/// The shell: the header, and whichever of the three pages it's pointing at.
+///
+/// Session state lives here rather than in `HomePage` because it outlives the
+/// page — you can wander to History mid-generation and come back to a finished
+/// session.
 struct ContentView: View {
+
+    @State private var page = Page.home
 
     /// Newest first — the order the profile builder and the history list both want.
     @Query(sort: \TrainingRecord.date, order: .reverse) private var history: [TrainingRecord]
     @Environment(\.modelContext) private var modelContext
     @AppStorage(TrainingProfile.levelKey) private var level: String = TrainingProfile.Level.beginner.rawValue
+    @AppStorage(CoachingNotes.key) private var notesData: Data = Data()
 
-    @State private var sessions: [Session] = []
     @State private var live: SessionEngine?
     @State private var problem: String?
     @State private var planned: PlannedSession?
     @State private var isGenerating = false
-    @State private var showingSettings = false
     @State private var showingSetup = false
     @State private var request = SessionRequest()
 
     private let audioSession = AudioSessionController()
 
     /// Built fresh from real history every time it's read — what they drilled,
-    /// what they asked for, what they didn't finish. Nothing invented.
+    /// what they asked for, what they didn't finish, and what they told the
+    /// Coach page outright. Nothing invented.
     private var profile: TrainingProfile {
         TrainingProfile.from(
             history: history,
-            level: TrainingProfile.Level(rawValue: level) ?? .beginner
+            level: TrainingProfile.Level(rawValue: level) ?? .beginner,
+            standing: CoachingNotes.decode(notesData).map(\.text)
         )
     }
 
     var body: some View {
-        NavigationStack {
-            List {
-                Section("Today") {
-                    todaysSession
-                }
-
-                Section {
-                    ForEach(sessions) { session in
-                        Button {
-                            Task { await launch(session) }
-                        } label: {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(session.title)
-                                    .font(.headline)
-                                    .foregroundStyle(Theme.Palette.primaryText)
-                                Text(summary(of: session))
-                                    .font(.subheadline)
-                                    .foregroundStyle(Theme.Palette.secondaryText)
-                            }
-                        }
-                    }
-                } header: {
-                    Text("Offline")
-                } footer: {
-                    Text("Prop the phone anywhere you can hear it, then say \u{201C}let\u{2019}s go\u{201D}.")
-                }
-
-                Section("What the cornerman knows about you") {
-                    whatItKnows
-                }
-
-                if !history.isEmpty {
-                    Section("History") {
-                        ForEach(history) { record in
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(record.title)
-                                    .font(.subheadline.weight(.medium))
-                                Text("\(record.roundsCompleted)/\(record.roundsPlanned) rounds \u{00B7} \(record.date.formatted(.relative(presentation: .named)))")
-                                    .font(.caption)
-                                    .foregroundStyle(Theme.Palette.secondaryText)
-                            }
-                        }
-                        .onDelete(perform: delete)
-                    }
-                }
-
-                if let problem {
-                    Section("Problem") {
-                        Text(problem).foregroundStyle(.red)
-                    }
-                }
-            }
-            .navigationTitle("CORNER")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showingSettings = true
-                    } label: {
-                        Image(systemName: "gearshape")
-                    }
-                    .accessibilityLabel("Settings")
-                }
-            }
-            .sheet(isPresented: $showingSettings) {
-                SettingsView()
-            }
-            .sheet(isPresented: $showingSetup) {
-                SessionSetupSheet(request: $request) {
-                    Task { await generate() }
-                }
+        // A paging TabView rather than a `switch`, so the pages can also be
+        // swiped between. Same binding as the header, so tapping a pill and
+        // swiping are the same gesture by other means. The dots are off —
+        // the header is already the indicator.
+        TabView(selection: $page) {
+            homePage
+                .tag(Page.home)
+            CoachPage(profile: profile)
+                .tag(Page.coach)
+            HistoryPage(history: history, onDelete: delete)
+                .tag(Page.history)
+            SettingsView()
+                .tag(Page.settings)
+        }
+        .tabViewStyle(.page(indexDisplayMode: .never))
+        // `safeAreaInset` rather than stacking the header above this in a VStack:
+        // it reserves the header's height so nothing starts underneath it, while
+        // still letting the lists scroll *behind* it. That second half is what
+        // the header's material has to blur — in a VStack there's nothing back
+        // there but flat colour, and a blur over flat colour is just colour.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            CornerHeader(page: $page)
+        }
+        .background(Theme.Palette.background)
+        .preferredColorScheme(.light)
+        .sheet(isPresented: $showingSetup) {
+            SessionSetupSheet(request: $request) {
+                Task { await generate() }
             }
         }
-        .preferredColorScheme(.dark)
-        .task { load() }
         .fullScreenCover(item: $live) { engine in
             LiveSessionView(engine: engine) { summary in
                 record(summary)
@@ -125,6 +87,44 @@ struct ContentView: View {
         .onChange(of: live == nil) { _, gone in
             if gone { audioSession.deactivate() }
         }
+    }
+
+    // MARK: - Home
+
+    private var homePage: some View {
+        List {
+            Section("Today") {
+                todaysSession
+            }
+
+            // Under today's session rather than over it. Home's job is to get a
+            // fighter training in two taps, and the dashboard is the reason to
+            // train, not the way — a screen that leads with last week's numbers
+            // asks you to read before it lets you work.
+            Section {
+                SummaryCards(stats: TrainingStats.from(history: history))
+                    // Zero, not 16. The list style already insets the section,
+                    // and any row inset is charged on top of that — the cards
+                    // were paying the margin twice and coming out narrow.
+                    .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 12, trailing: 0))
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+            }
+            .listSectionMargins(.horizontal, 16)
+
+            if let problem {
+                Section("Problem") {
+                    Text(problem).foregroundStyle(.red)
+                }
+            }
+        }
+        .scrollContentBackground(.hidden)
+        // iOS 26 washes the edges of a scroll view where it meets a bar, and
+        // ours meets one it doesn't know about: the header is a `safeAreaInset`,
+        // so the system tints behind it, and pours the same wash at the bottom
+        // where there's no bar at all — an empty slab over the last card. The
+        // header is meant to be pills and nothing else, so both go.
+        .scrollEdgeEffectHidden(true, for: .all)
     }
 
     /// The AI-generated session. M2 makes this the hero card; for now it just
@@ -157,29 +157,6 @@ struct ContentView: View {
                 showingSetup = true
             }
             .foregroundStyle(Theme.Palette.accent)
-        }
-    }
-
-    /// What the cornerman actually knows about you. Shown because "the AI
-    /// learns from your sessions" is a claim, and a claim you can't inspect is
-    /// indistinguishable from a lie.
-    @ViewBuilder
-    private var whatItKnows: some View {
-        if history.isEmpty {
-            Text("Nothing yet. It learns from sessions you finish.")
-                .font(.footnote)
-                .foregroundStyle(Theme.Palette.secondaryText)
-        } else {
-            VStack(alignment: .leading, spacing: 6) {
-                if !profile.recentFocuses.isEmpty {
-                    Text("You've drilled: \(profile.recentFocuses.prefix(5).joined(separator: ", "))")
-                }
-                ForEach(profile.notes, id: \.self) { note in
-                    Text(note)
-                }
-            }
-            .font(.footnote)
-            .foregroundStyle(Theme.Palette.secondaryText)
         }
     }
 
@@ -235,14 +212,6 @@ struct ContentView: View {
         try? modelContext.save()
     }
 
-    private func load() {
-        do {
-            sessions = try BundledSessions.load()
-        } catch {
-            problem = "Couldn't load sessions: \(error.localizedDescription)"
-        }
-    }
-
     private func launch(_ session: Session) async {
         problem = nil
 
@@ -273,7 +242,10 @@ struct ContentView: View {
         live = SessionEngine(
             session: session,
             voice: voice,
-            recognizer: SpeechAnalyzerRecognizer()
+            recognizer: SpeechAnalyzerRecognizer(),
+            // Same key as the session writer, and the same shrug when there
+            // isn't one: no key means the phrase list, which still works.
+            intent: CommandInterpreter(client: try? ClaudeClient.fromBundle())
         )
     }
 

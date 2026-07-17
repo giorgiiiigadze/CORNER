@@ -7,12 +7,13 @@ import SwiftUI
 /// behaves exactly like every other iOS settings screen. The Live Session
 /// screen is where the brand lives; spending personality here would only make
 /// the app feel less like Apple built it.
+///
+/// A page under the header rather than a sheet, so it has no title bar and
+/// nothing to dismiss — the header is how you leave.
 struct SettingsView: View {
 
 
     @AppStorage(ElevenLabsVoice.preferenceKey) private var cornermanVoiceID: String = ElevenLabsCatalog.defaultVoiceID
-    @AppStorage(TrainingProfile.levelKey) private var level: String = TrainingProfile.Level.beginner.rawValue
-    @Environment(\.dismiss) private var dismiss
 
     @State private var cornerman: [ElevenLabsCatalog.Entry] = []
     @State private var cornermanProblem: String?
@@ -22,47 +23,26 @@ struct SettingsView: View {
     private let preview = VoicePreviewer()
 
     var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    Picker("Level", selection: $level) {
-                        ForEach(TrainingProfile.Level.allCases, id: \.rawValue) { level in
-                            Text(level.rawValue.capitalized).tag(level.rawValue)
-                        }
-                    }
-                } header: {
-                    Text("You")
-                } footer: {
-                    // The app can see what you drilled and when you asked it to
-                    // slow down. It cannot see how good you are, so it asks.
-                    Text("Everything else the cornerman knows, it learns from your sessions.")
-                }
-
-                Section {
-                    cornermanVoices
-                } header: {
-                    Text("Cornerman voice")
-                } footer: {
-                    Text("Tap to hear it. The voice is the app — pick one you'd take instructions from.")
-                }
-
-                Section("The twelve commands") {
-                    ForEach(CommandReference.all, id: \.command) { entry in
-                        LabeledContent(entry.say, value: entry.does)
-                            .font(.subheadline)
-                    }
-                }
+        List {
+            Section {
+                cornermanVoices
+            } header: {
+                Text("Cornerman voice")
+            } footer: {
+                Text("Tap to hear it. The voice is the app — pick one you'd take instructions from.")
             }
-            .navigationTitle("Settings")
-            .navigationBarTitleDisplayMode(.inline)
-            .task { await loadCornermanVoices() }
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
+
+            Section("The twelve commands") {
+                ForEach(CommandReference.all, id: \.command) { entry in
+                    LabeledContent(entry.say, value: entry.does)
+                        .font(.subheadline)
                 }
             }
         }
-        .preferredColorScheme(.dark)
+        .scrollContentBackground(.hidden)
+        // As on home: no system wash behind the header, none at the bottom.
+        .scrollEdgeEffectHidden(true, for: .all)
+        .task { await loadCornermanVoices() }
     }
 
     /// The cornerman. The only voice the user picks.
@@ -167,9 +147,11 @@ nonisolated enum CommandReference {
         Entry(command: .start, say: "\u{201C}Let\u{2019}s go\u{201D}", does: "Start"),
         Entry(command: .pause, say: "\u{201C}Pause\u{201D}", does: "Stop the clock"),
         Entry(command: .resume, say: "\u{201C}Resume\u{201D}", does: "Carry on"),
-        Entry(command: .nextRound, say: "\u{201C}Next round\u{201D}", does: "End this round"),
+        Entry(command: .nextRound, say: "\u{201C}Next round\u{201D}", does: "Skip to the next round"),
         Entry(command: .oneMoreRound, say: "\u{201C}One more round\u{201D}", does: "Add a round"),
         Entry(command: .timeCheck, say: "\u{201C}How much time\u{201D}", does: "Speaks the clock"),
         Entry(command: .endSession, say: "\u{201C}End session\u{201D}", does: "Done"),
+        Entry(command: .confirm, say: "\u{201C}Yes\u{201D}", does: "Answers \u{201C}You sure?\u{201D}"),
+        Entry(command: .cancel, say: "\u{201C}No\u{201D}", does: "Never mind"),
     ]
 }

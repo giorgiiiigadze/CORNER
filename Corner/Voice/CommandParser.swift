@@ -31,6 +31,18 @@ nonisolated enum CommandParser {
         ("end session", .endSession), ("end workout", .endSession),
         ("im done", .endSession), ("i am done", .endSession),
         ("finish", .endSession), ("thats it", .endSession),
+
+        // Answers to "You sure?", and inert at any other moment.
+        //
+        // Note what isn't here: bare "sure". The app's own question is "You
+        // sure?", so a phrase of "sure" would let one garbled word past the echo
+        // filter answer the question the app just asked — and the answer would
+        // be yes. Same reason no acknowledgement contains a command phrase.
+        ("yes", .confirm), ("yeah", .confirm), ("yep", .confirm),
+        ("confirm", .confirm), ("im sure", .confirm), ("i am sure", .confirm),
+
+        ("no", .cancel), ("nope", .cancel), ("cancel", .cancel),
+        ("never mind", .cancel), ("forget it", .cancel),
     ]
 
     /// Lowercases, drops apostrophes so "let's" reads as "lets", and reduces

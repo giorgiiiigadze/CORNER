@@ -43,7 +43,9 @@ extension VoiceCommand {
         case .resume: "Back to work."
         case .nextRound: "Moving on."
         case .oneMoreRound: "Adding a round at the end."
-        case .start, .timeCheck, .endSession: nil
+        case .cancel: "As you were."
+        // `confirm` is followed by the session ending, which speaks for itself.
+        case .start, .timeCheck, .endSession, .confirm: nil
         }
     }
 }
@@ -107,7 +109,9 @@ final class SessionEngine {
             focuses: session.rounds.map(\.focus),
             roundsPlanned: session.rounds.count,
             roundsCompleted: completedRounds,
-            endedEarly: endedEarly
+            endedEarly: endedEarly,
+            sessionSeconds: sessionSeconds,
+            pauseCount: pauseCount
         )
     }
 
@@ -118,6 +122,7 @@ final class SessionEngine {
     private let recognizer: any VoiceRecognizer
     private let ticker: any Ticker
     private let bell: any Ringer
+    private let intent: (any IntentReader)?
     private let log = Logger(subsystem: "Giorgi.Corner", category: "session")
 
     // MARK: - Private state
@@ -125,8 +130,21 @@ final class SessionEngine {
     private var sessionTask: Task<Void, Never>?
     private var commandTask: Task<Void, Never>?
     private var transcriptTask: Task<Void, Never>?
+    private var intentTask: Task<Void, Never>?
+    private var confirmationTask: Task<Void, Never>?
+
+    /// True between "end session" and the answer to "You sure?".
+    ///
+    /// Deliberately doesn't stop the clock. If the answer never comes, the round
+    /// they're still in was never interrupted — the question cost them nothing,
+    /// which is the only way asking it is free.
+    private(set) var awaitingEndConfirmation = false
     private var pauseWaiters: [CheckedContinuation<Void, Never>] = []
     private var bonusRounds: [Round] = []
+
+    /// True when the countdown that just ended was ended by the fighter rather
+    /// than by time. Set by `nextRound`, read once, and cleared immediately.
+    private var skipRequested = false
 
     /// Counts lines so a finished one can tell whether it's still the current
     /// one before lowering the echo filter behind a newer line's back.
@@ -135,15 +153,56 @@ final class SessionEngine {
     /// How long the speaker keeps bleeding a line after playback ends.
     static let echoDrain: Duration = .milliseconds(300)
 
+    /// The question, asked before the one thing that can't be undone.
+    ///
+    /// Note what it doesn't say: "say yes to end it". That would put the word
+    /// "yes" in the app's own mouth a second before it listens for exactly that
+    /// word — and the echo filter holds right up until one syllable comes back
+    /// garbled, at which point the app answers its own question and ends the
+    /// session nobody meant to end. Same rule as `acknowledgement`. Two words is
+    /// also just what a corner would say.
+    /// `nonisolated` for the same reason `acknowledgement` is: the project builds
+    /// with `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, which pins even a string
+    /// constant to the main actor — and `openingLines(of:)` is nonisolated and
+    /// prewarms this.
+    nonisolated static let confirmEndLine = "You sure?"
+
+    /// How long the question stands before it's forgotten.
+    ///
+    /// Long enough to answer mid-round while breathing hard; short enough that a
+    /// "yeah" thrown at someone across the gym two minutes later can't land on a
+    /// question the fighter no longer remembers being asked.
+    static let confirmationWindow: Duration = .seconds(10)
+
     // Observed, not inferred. These become the training history that makes the
     // next session different from this one.
     private var completedRounds = 0
     private var endedEarly = false
 
+    /// Seconds the session actually ran — rounds and the rests between them.
+    ///
+    /// Counted a tick at a time rather than derived from the plan, because the
+    /// plan is a claim and this is the measurement: a round walked out of at
+    /// forty seconds contributes forty, not its planned three minutes.
+    ///
+    /// Rest counts; a pause doesn't. The difference is that rest is the session
+    /// running and a pause is the session stopped — five minutes of wrapping
+    /// your hands mid-workout isn't time you trained, and counting it would mean
+    /// the way to a big number is to walk away.
+    private var sessionSeconds = 0
+
+    /// How often they stopped the clock. Evidence about the session's pitch —
+    /// six pauses in six rounds is a session that was too much.
+    private var pauseCount = 0
+
     init(
         session: Session,
         voice: any Voice,
         recognizer: any VoiceRecognizer,
+        // Nil means the phrase list is the whole story — no key, or a caller
+        // that doesn't want the network. The session runs identically either
+        // way; it just understands fewer ways of saying things.
+        intent: (any IntentReader)? = nil,
         ticker: any Ticker = SystemTicker(),
         // Not `= Bell()`: a default argument is evaluated at the call site, which
         // isn't on the main actor, and `Bell` is. Built here instead, where we
@@ -153,6 +212,7 @@ final class SessionEngine {
         self.session = session
         self.voice = voice
         self.recognizer = recognizer
+        self.intent = intent
         self.ticker = ticker
         self.bell = bell ?? Bell()
     }
@@ -186,12 +246,31 @@ final class SessionEngine {
                 self?.lastHeard = text
             }
         }
+
+        // Everything the phrase list didn't recognise, read for intent.
+        //
+        // One at a time, on purpose: `for await` won't pull the next sentence
+        // until this one is answered, and the stream keeps only the newest. So a
+        // fighter talking through a slow round-trip can't stack up a queue of
+        // commands that all land at once when the network catches up.
+        if let intent {
+            let unmatched = await recognizer.unmatched
+            intentTask = Task { [weak self] in
+                for await text in unmatched {
+                    guard let command = await intent.interpret(text) else { continue }
+                    guard let self else { return }
+                    await self.handle(command)
+                }
+            }
+        }
     }
 
     func end() async {
         sessionTask?.cancel()
         commandTask?.cancel()
         transcriptTask?.cancel()
+        intentTask?.cancel()
+        confirmationTask?.cancel()
         resumeWaiters()
         await voice.cancel()
         await voice.stopPrewarming()
@@ -212,6 +291,13 @@ final class SessionEngine {
     func handle(_ command: VoiceCommand) async {
         log.debug("Command: \(command.rawValue, privacy: .public)")
 
+        // Anything else means they've moved on, and a question they've moved on
+        // from isn't standing any more. Without this, "end session" … "next" …
+        // "yeah" ends the session on a "yeah" that was answering nothing.
+        if awaitingEndConfirmation, !command.answersAQuestion, command != .endSession {
+            forgetTheQuestion()
+        }
+
         switch command {
         case .start:
             guard phase == .idle else { return }
@@ -220,6 +306,9 @@ final class SessionEngine {
         case .pause:
             guard !isPaused, phase != .idle else { return }
             isPaused = true
+            // After the guard, so it counts pauses that happened rather than
+            // times the word was said.
+            pauseCount += 1
             // Deliberately doesn't cut off whatever he's saying. It used to, back
             // when he talked over a running clock — a cornerman still calling
             // combos after you've said stop isn't paused. He only speaks before
@@ -248,10 +337,61 @@ final class SessionEngine {
             await say(timeRemainingSpoken())
 
         case .endSession:
-            endedEarly = phase != .debrief
-            await say("Session over. Good work.")
-            await end()
+            // Before the first bell and after the last there's nothing to lose,
+            // so the question would be pure ceremony — and a confirmation you
+            // always say yes to teaches you to say yes without reading it.
+            guard phase != .idle, phase != .debrief else {
+                await endNow()
+                return
+            }
+            // Saying it twice is a confirmation too. Someone who means it tends
+            // to repeat themselves, not answer.
+            guard !awaitingEndConfirmation else {
+                await endNow()
+                return
+            }
+            await askToConfirmEnd()
+
+        case .confirm:
+            // Inert unless a question is standing, which is what lets a word as
+            // common as "yeah" live in the grammar at all.
+            guard awaitingEndConfirmation else { return }
+            await endNow()
+
+        case .cancel:
+            guard awaitingEndConfirmation else { return }
+            forgetTheQuestion()
+            await acknowledge(command)
         }
+    }
+
+    /// Asks, and starts the clock on the question.
+    private func askToConfirmEnd() async {
+        awaitingEndConfirmation = true
+
+        confirmationTask?.cancel()
+        confirmationTask = Task { [weak self, ticker] in
+            try? await ticker.sleep(for: Self.confirmationWindow)
+            guard !Task.isCancelled else { return }
+            // Silently. A cornerman who announces that he's stopped waiting for
+            // an answer is talking during a round for no reason.
+            self?.awaitingEndConfirmation = false
+        }
+
+        await say(Self.confirmEndLine)
+    }
+
+    private func forgetTheQuestion() {
+        confirmationTask?.cancel()
+        confirmationTask = nil
+        awaitingEndConfirmation = false
+    }
+
+    private func endNow() async {
+        forgetTheQuestion()
+        endedEarly = phase != .debrief
+        await say("Session over. Good work.")
+        await end()
     }
 
     /// Says the confirmation, if the command has one.
@@ -314,6 +454,10 @@ final class SessionEngine {
         // each, ever, and free from the second session on.
         lines.append(contentsOf: VoiceCommand.allCases.compactMap(\.acknowledgement))
         lines.append(contentsOf: ["That's the session. Well done.", "Session over. Good work."])
+        // The question has to come back instantly or it isn't a question — a
+        // fighter who says "end session" into two seconds of silence says it
+        // again, and the second one is the confirmation.
+        lines.append(confirmEndLine)
         return lines
     }
 
@@ -362,6 +506,9 @@ final class SessionEngine {
             guard !Task.isCancelled else { return }
             completedRounds += 1
 
+            // Read before anything else can set it again.
+            let walkedOut = consumeSkip()
+
             // Ends the round and opens the rest in one stroke, the way a real
             // bell does — there aren't two sounds, there's one transition.
             bell.ring()
@@ -373,10 +520,18 @@ final class SessionEngine {
             }
 
             let isLast = index == rounds.count - 1
-            if !isLast, round.rest > 0 {
+
+            // "Next round" means the next round. Resting here is what made the
+            // command mean two different things depending on when it was said:
+            // asked to move on mid-round, the app answered "Moving on." and then
+            // gave them a minute of rest, which is not moving on.
+            if !isLast, round.rest > 0, !walkedOut {
                 phase = .resting
                 await countDown(from: round.rest)
                 guard !Task.isCancelled else { return }
+                // A skip during the rest just ends the rest — it's already going
+                // where they asked. Cleared so it can't skip the round after it.
+                _ = consumeSkip()
             }
             index += 1
         }
@@ -401,12 +556,32 @@ final class SessionEngine {
             try? await ticker.sleep(for: .seconds(1))
             guard !Task.isCancelled else { return }
             secondsRemaining -= 1
+
+            // Here, and only here, is a second of session. This runs for rounds
+            // and for rests, and a pause never reaches it — `waitWhilePaused` is
+            // above it. So the total is the session as it actually ran, and
+            // nothing downstream has to subtract anything.
+            sessionSeconds += 1
         }
     }
 
+    /// Ends whichever countdown is running, and says why it ended.
+    ///
+    /// The countdown reaching zero and the fighter cutting it short are the same
+    /// zero, and `runSession` has to tell them apart: a round that ran its course
+    /// is owed its rest, and a round the fighter walked out of isn't.
     private func skipToNextRound() {
-        // Ending the countdown ends the round; `runSession` moves on by itself.
+        // Nothing to cut short while the opener is being spoken — the countdown
+        // hasn't started, and it would overwrite this the moment it does.
+        guard phase == .active || phase == .resting else { return }
+        skipRequested = true
         secondsRemaining = 0
+    }
+
+    /// Reads the skip and clears it, so it can't leak into the next countdown.
+    private func consumeSkip() -> Bool {
+        defer { skipRequested = false }
+        return skipRequested
     }
 
     private func addBonusRound() {

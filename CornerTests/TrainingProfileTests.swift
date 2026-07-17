@@ -102,4 +102,38 @@ struct TrainingProfileTests {
 
         #expect(profile.level == .beginner)
     }
+
+    // MARK: - Standing instructions
+
+    /// Same argument as `level`, and the stakes are higher: "no body work, my
+    /// ribs are shot" is not derivable from any session log, and the cost of
+    /// dropping it is a session that hurts someone.
+    @Test func standingInstructionsSurviveTheHistory() {
+        let history = (1...20).map { record(daysAgo: $0) }
+        let profile = TrainingProfile.from(
+            history: history,
+            level: .advanced,
+            standing: ["Southpaw", "Ribs are shot — no body work"]
+        )
+
+        #expect(profile.standing == ["Southpaw", "Ribs are shot — no body work"])
+    }
+
+    /// They're what the fighter said, not what the app watched. Letting them
+    /// leak into `notes` would blur a line the prompt depends on: notes are
+    /// observations, and observations can be wrong in a way these can't.
+    @Test func standingInstructionsAreNotObservations() {
+        let profile = TrainingProfile.from(
+            history: [record(endedEarly: true)],
+            level: .beginner,
+            standing: ["Southpaw"]
+        )
+
+        #expect(!profile.notes.contains("Southpaw"))
+        #expect(profile.standing == ["Southpaw"])
+    }
+
+    @Test func noStandingInstructionsIsTheDefault() {
+        #expect(TrainingProfile.from(history: [], level: .beginner).standing.isEmpty)
+    }
 }
