@@ -3,22 +3,25 @@ import os
 
 /// The mouth.
 ///
-/// `AVSpeechSynthesizer` only, deliberately. Personality is the product, but M1 is
-/// testing whether voice *control* works — a robot voice is enough to answer that.
-/// The `Voice` protocol is the seam ElevenLabs slots into later without the session
-/// engine noticing.
+/// The `Voice` protocol is the seam ElevenLabs sits behind, so the session engine
+/// never learns whether a line came off the network or out of the phone.
 nonisolated protocol Voice: Sendable {
     /// Returns when the line has finished playing, or immediately if cancelled.
     func say(_ text: String) async
-    /// Cuts a line off mid-word. "Pause" has to freeze mid-combo, so callouts can
-    /// never be fire-and-forget.
+
+    /// Cuts a line off mid-word.
+    ///
+    /// Only used to shut him up when a session ends. Nothing else cancels a line
+    /// any more: he speaks before the bell and then goes quiet, so an interruption
+    /// has nothing to save.
     func cancel() async
+
     /// A batch of lines that will be needed soon.
     ///
-    /// This is the seam that makes a cloud voice usable in a live round: the
-    /// session is known ahead of time, so audio can be fetched during the slack
-    /// — round one while the user wraps their hands, round N+1 while they work
-    /// round N. On-device voices ignore it.
+    /// This is the seam that makes a cloud voice usable at a bell: the session is
+    /// known ahead of time, so audio is fetched during the slack — the intro while
+    /// the fighter wraps their hands, round N+1 while they work round N. On-device
+    /// voices ignore it.
     func prewarm(_ lines: [String]) async
 
     /// Stop fetching anything not yet needed. Called when a session ends, so an
@@ -41,10 +44,11 @@ final class Cornerman: Voice {
     private let log = Logger(subsystem: "Giorgi.Corner", category: "cornerman")
     private let voice: AVSpeechSynthesisVoice?
 
-    /// Defaults to whatever the user picked in Settings, falling back to the
-    /// best installed voice.
-    init(voiceIdentifier: String? = UserDefaults.standard.string(forKey: VoiceCatalog.preferenceKey)) {
-        voice = VoiceCatalog.resolve(voiceIdentifier)
+    /// No voice to pass in: Settings offers ElevenLabs voices only, so there's no
+    /// on-device choice to honour. This is the fallback, and it takes the best
+    /// thing installed.
+    init() {
+        voice = VoiceCatalog.best()
         synthesizer.delegate = coordinator
         log.info("Voice: \(self.voice?.name ?? "system default", privacy: .public)")
     }
@@ -61,8 +65,8 @@ final class Cornerman: Voice {
     private func enqueue(_ text: String) {
         let utterance = AVSpeechUtterance(string: text)
         utterance.voice = voice
-        // Slightly quicker than default: a corner shouting a combo is not a
-        // podcast, and the gap between callouts is what `Tempo` controls.
+        // Slightly quicker than default: a corner talking to you between rounds
+        // is not a podcast.
         utterance.rate = 0.54
         utterance.pitchMultiplier = 1.0
         utterance.postUtteranceDelay = 0
@@ -70,17 +74,6 @@ final class Cornerman: Voice {
         synthesizer.speak(utterance)
     }
 
-    /// Prefers a premium or enhanced voice when the user has downloaded one —
-    /// the compact default is the single biggest thing that makes TTS sound cheap.
-    private static func bestAvailableVoice() -> AVSpeechSynthesisVoice? {
-        let language = AVSpeechSynthesisVoice.currentLanguageCode()
-        let candidates = AVSpeechSynthesisVoice.speechVoices()
-            .filter { $0.language == language }
-
-        return candidates.first { $0.quality == .premium }
-            ?? candidates.first { $0.quality == .enhanced }
-            ?? AVSpeechSynthesisVoice(language: language)
-    }
 }
 
 /// Bridges the synthesizer's delegate callbacks — which arrive on an unspecified

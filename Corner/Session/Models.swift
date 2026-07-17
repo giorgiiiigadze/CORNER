@@ -17,11 +17,19 @@ nonisolated struct Round: Codable, Sendable, Identifiable {
 
     /// Two or three words: "Straight punches", "Body shots".
     ///
-    /// Shown on screen, never spoken. It's the session's shape — the reason
-    /// round four is different from round one — and it costs nothing to display,
-    /// where saying it out loud would break the silence the round is for. Glance
-    /// at it or ignore it.
+    /// Shown on screen in big type, and spoken as part of the round's opening
+    /// line. It's the session's shape — the reason round four is different from
+    /// round one.
     let focus: String
+
+    /// One coaching sentence, said as the round opens: "Turn the hip, don't arm
+    /// it." Written by Claude; the round number and the focus around it are the
+    /// app's business.
+    ///
+    /// Optional because `withoutSightClaims` can empty it. A round that ends up
+    /// with nothing honest to say announces itself and stops, which is better
+    /// than narrating a round that hasn't happened.
+    let opener: String?
 
     let durationSeconds: Int
     let restSeconds: Int

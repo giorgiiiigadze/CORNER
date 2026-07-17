@@ -51,10 +51,9 @@ nonisolated enum CommandParser {
     ///
     /// - **Latest wins.** A transcript accumulates ("lets go ... pause"), so the
     ///   command the user just said is the one at the end.
-    /// - **Longest wins at the same position.** " next round " also contains " next ",
-    ///   and " one more round " also contains " one more ". Without this, every
-    ///   `nextRound` would fire as a bare `next` and "one more round" would be heard
-    ///   as a request to repeat a combo.
+    /// - **Longest wins at the same position.** " next round " also contains
+    ///   " next ". Without this, a phrase would fire as whichever of its
+    ///   fragments matched first rather than as the thing that was said.
     static func parse(_ text: String) -> VoiceCommand? {
         let haystack = normalize(text)
 

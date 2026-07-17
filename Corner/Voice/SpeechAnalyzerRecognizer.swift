@@ -208,15 +208,17 @@ actor SpeechAnalyzerRecognizer: VoiceRecognizer {
         let input = engine.inputNode
 
         // Hardware echo cancellation: subtracts what the device is playing from
-        // what the mic hears. It's why Siri can listen while it talks, and it's
-        // what lets the cornerman be interrupted mid-combo instead of the app
-        // deafening itself every time it speaks.
+        // what the mic hears. It's why Siri can listen while it talks, and here
+        // it's what keeps the mic usable while the cornerman speaks instead of
+        // the app deafening itself every time it opens its mouth.
         //
         // Must happen before `engine.start()` — the header is explicit that it
-        // can only be toggled while the engine is stopped. Failure is survivable:
-        // `say(_:)` still mutes for lines that could trigger the app itself, so a
-        // phone without voice processing degrades to the old behaviour rather
-        // than to a session that obeys its own voice.
+        // can only be toggled while the engine is stopped.
+        //
+        // Failure is survivable but not free: the text-matching filter in
+        // `handle(_:)` is the real guard against the app obeying its own voice,
+        // and it works on words rather than audio. This just means it has less
+        // garbage to catch.
         do {
             try input.setVoiceProcessingEnabled(true)
             log.info("Echo cancellation on — the mic can hear you over the cornerman")
@@ -293,10 +295,11 @@ actor SpeechAnalyzerRecognizer: VoiceRecognizer {
 
         // The cornerman's own voice coming back in through the microphone.
         //
-        // Dropped here, ahead of everything — the screen, the twelve commands,
-        // the network — because an echo must not read as a person. It reaches
-        // this far at all so that everything *else* said while he talks can get
-        // through, which is what lets him be interrupted.
+        // Dropped ahead of everything, because an echo must not read as a person:
+        // an intro ending "let's go" or an opener saying "next round" is a command
+        // the app would be giving itself. It's a text match rather than a mute so
+        // that the fighter is still heard while he's talking — say "pause" over
+        // the intro and it lands the moment he stops.
         //
         // Logged rather than silently swallowed: how much leaks past hardware
         // echo cancellation is precisely the number that says whether this holds

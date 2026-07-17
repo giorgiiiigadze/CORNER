@@ -4,9 +4,9 @@ import os
 
 /// The cornerman's real voice.
 ///
-/// The problem with cloud text-to-speech in this app is latency: a combo has to
-/// land the instant it's called, and a two-second round trip mid-round would
-/// wreck the rhythm you punch to.
+/// The problem with cloud text-to-speech in this app is latency: his line has to
+/// land the moment the round turns over, and a two-second round trip while the
+/// fighter stands waiting for a bell is the whole illusion gone.
 ///
 /// We designed that away. Claude hands us the whole session up front, so every
 /// line is known before the user says "let's go" — all of it is fetched and
@@ -65,7 +65,7 @@ actor ElevenLabsVoice: Voice {
     func say(_ text: String) async {
         guard let audio = await audio(for: text) else {
             // Network died and it isn't cached — say it in the robot voice
-            // rather than skip a combo.
+            // rather than let a round open in silence.
             await fallback.say(text)
             return
         }
@@ -73,9 +73,9 @@ actor ElevenLabsVoice: Voice {
     }
 
     func cancel() async {
-        // Not awaited: stopping is a lock acquisition, not a suspension. That's
-        // deliberate — "pause" has to cut the audio instantly, and this way it
-        // can't be left waiting behind anything.
+        // Not awaited: stopping is a lock acquisition, not a suspension, so
+        // ending a session can't be left waiting behind a line that's still
+        // playing. Nothing else cancels — see `Voice.cancel`.
         player.stop()
         await fallback.cancel()
     }
@@ -86,8 +86,8 @@ actor ElevenLabsVoice: Voice {
     /// Deliberately *additive* — an earlier version cancelled the previous batch,
     /// which was right when this was called once per session and silently wrong
     /// the moment it became once per round: round two's fetch would have killed
-    /// round one's mid-flight, and the combos would have arrived late in the only
-    /// round that can't wait.
+    /// round one's mid-flight, and the fighter would have got a bell with no
+    /// coach in the only round that can't wait.
     func prewarm(_ lines: [String]) async {
         prewarmTasks.append(Task { [weak self] in
             await self?.fetchAll(lines)

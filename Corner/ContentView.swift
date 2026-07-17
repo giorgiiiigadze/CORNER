@@ -112,6 +112,19 @@ struct ContentView: View {
                 record(summary)
             }
         }
+        // Hand the audio back when the workout screen goes away.
+        //
+        // `activate` claims `.playAndRecord` with `.duckOthers`, and nothing was
+        // ever giving it up: the session stayed live for the rest of the app's
+        // life, so the music the fighter was training to stayed quiet after they
+        // finished, until they force-quit. `deactivate` is also the only thing
+        // that removes the interruption observers.
+        //
+        // On dismissal rather than in `end()`, because the session ends by three
+        // different routes and this has to happen on all of them.
+        .onChange(of: live == nil) { _, gone in
+            if gone { audioSession.deactivate() }
+        }
     }
 
     /// The AI-generated session. M2 makes this the hero card; for now it just
