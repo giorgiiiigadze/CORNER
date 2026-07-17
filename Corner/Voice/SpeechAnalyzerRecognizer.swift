@@ -62,14 +62,25 @@ actor SpeechAnalyzerRecognizer: VoiceRecognizer {
     private let commandStream: AsyncStream<VoiceCommand>
     private let transcriptContinuation: AsyncStream<String>.Continuation
     private let transcriptStream: AsyncStream<String>
+    private let unmatchedContinuation: AsyncStream<String>.Continuation
+    private let unmatchedStream: AsyncStream<String>
 
     var commands: AsyncStream<VoiceCommand> { commandStream }
     var transcripts: AsyncStream<String> { transcriptStream }
+    var unmatched: AsyncStream<String> { unmatchedStream }
 
     init(locale: Locale = Locale.current) {
         self.locale = locale
         (commandStream, commandContinuation) = AsyncStream.makeStream(of: VoiceCommand.self)
         (transcriptStream, transcriptContinuation) = AsyncStream.makeStream(of: String.self)
+        // Newest only. Reading intent takes about a second, and if two sentences
+        // arrive while one is in flight, the older one is already stale — acting
+        // on it later would pause a session because of something said two
+        // sentences ago. Dropping it is the correct behaviour, not a shortcut.
+        (unmatchedStream, unmatchedContinuation) = AsyncStream.makeStream(
+            of: String.self,
+            bufferingPolicy: .bufferingNewest(1)
+        )
     }
 
     // MARK: - Lifecycle
@@ -147,6 +158,7 @@ actor SpeechAnalyzerRecognizer: VoiceRecognizer {
 
         commandContinuation.finish()
         transcriptContinuation.finish()
+        unmatchedContinuation.finish()
         log.info("Recognizer stopped")
     }
 
@@ -319,11 +331,20 @@ actor SpeechAnalyzerRecognizer: VoiceRecognizer {
         let end = result.range.end
         guard end > consumedThrough else { return }
 
-        // Not one of the seven, so it's not for us. Speech that isn't a command
-        // used to be forwarded to Claude, who could change what was being
-        // drilled; there's nothing to drill now, so it's just talking. It still
-        // reaches `transcripts` above, which is what makes barge-in work.
-        guard let command = self.command(in: result) else { return }
+        // Not one of the seven — but "not on the list" and "not for us" aren't
+        // the same thing, which is what `unmatched` exists to say. "Stop" isn't
+        // a phrase here and obviously means pause, so the sentence goes to
+        // `IntentReader` for a slower, better read.
+        //
+        // Only when it's finished. A volatile result is a guess mid-word, and
+        // paying a network call to classify "sto" — then "stop" — then "stop it"
+        // would be three calls to answer one question, twice with the wrong text.
+        guard let command = self.command(in: result) else {
+            if result.isFinal, !text.trimmingCharacters(in: .whitespaces).isEmpty {
+                unmatchedContinuation.yield(text)
+            }
+            return
+        }
 
         // Ending the session is the one irreversible command, so it alone waits for
         // a finalized transcript. Everything else is cheap to get wrong and

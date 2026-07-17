@@ -16,10 +16,24 @@ final class TrainingRecord {
     var focuses: [String] = []
     var roundsPlanned: Int = 0
     var roundsCompleted: Int = 0
-    /// How often they asked for the callouts to space out. Real evidence the
-    /// pace was wrong for them, not a guess.
     /// True when they said "end session" rather than finishing the last round.
     var endedEarly: Bool = false
+
+    /// Seconds the session ran — rounds and rests, not pauses. Measured, not planned.
+    ///
+    /// Optional, and that's the whole point: `nil` means this session predates
+    /// the app recording it, which is a different fact from a session where you
+    /// trained for zero seconds. Defaulting to 0 would quietly fold old sessions
+    /// into every total and average as if you'd stood there doing nothing, and
+    /// nothing downstream could ever tell the difference. History you didn't
+    /// record is missing, not zero.
+    var sessionSeconds: Int?
+
+    /// How often the clock was stopped. Real evidence the session was pitched
+    /// wrong, rather than a guess from how it looked on paper.
+    ///
+    /// Optional for the same reason as `sessionSeconds`.
+    var pauseCount: Int?
 
     init(
         date: Date = .now,
@@ -27,7 +41,9 @@ final class TrainingRecord {
         focuses: [String],
         roundsPlanned: Int,
         roundsCompleted: Int,
-        endedEarly: Bool
+        endedEarly: Bool,
+        sessionSeconds: Int? = nil,
+        pauseCount: Int? = nil
     ) {
         self.date = date
         self.title = title
@@ -35,6 +51,8 @@ final class TrainingRecord {
         self.roundsPlanned = roundsPlanned
         self.roundsCompleted = roundsCompleted
         self.endedEarly = endedEarly
+        self.sessionSeconds = sessionSeconds
+        self.pauseCount = pauseCount
     }
 
     convenience init(summary: SessionSummary, date: Date = .now) {
@@ -44,7 +62,9 @@ final class TrainingRecord {
             focuses: summary.focuses,
             roundsPlanned: summary.roundsPlanned,
             roundsCompleted: summary.roundsCompleted,
-            endedEarly: summary.endedEarly
+            endedEarly: summary.endedEarly,
+            sessionSeconds: summary.sessionSeconds,
+            pauseCount: summary.pauseCount
         )
     }
 }
@@ -57,6 +77,10 @@ nonisolated struct SessionSummary: Sendable, Equatable {
     var roundsPlanned: Int
     var roundsCompleted: Int
     var endedEarly: Bool
+    /// Not optional here, unlike on `TrainingRecord`: the engine watched the
+    /// whole session, so it always knows. Only stored history can be unsure.
+    var sessionSeconds: Int = 0
+    var pauseCount: Int = 0
 }
 
 // MARK: - History → profile
@@ -65,11 +89,16 @@ extension TrainingProfile {
 
     /// Builds the profile Claude sees from what actually happened.
     ///
-    /// Everything here is an observation, not an inference about the person:
-    /// what they drilled, what they asked for, what they didn't finish. The one
-    /// thing we can't observe is skill, so that stays a question for the user
-    /// rather than something guessed from a session count.
-    static func from(history: [TrainingRecord], level: Level) -> TrainingProfile {
+    /// Everything derived here is an observation, not an inference about the
+    /// person: what they drilled, what they asked for, what they didn't finish.
+    /// The things we can't observe — their skill, their bad rib — aren't guessed
+    /// from a session count; they're asked for, and arrive as `level` and
+    /// `standing` rather than being invented in this function.
+    static func from(
+        history: [TrainingRecord],
+        level: Level,
+        standing: [String] = []
+    ) -> TrainingProfile {
         let recent = history.sorted { $0.date > $1.date }.prefix(4)
 
         // Newest first, de-duplicated: repeating "Hooks" four times tells Claude
@@ -82,7 +111,8 @@ extension TrainingProfile {
         return TrainingProfile(
             level: level,
             recentFocuses: Array(focuses.prefix(10)),
-            notes: notes(from: Array(recent))
+            notes: notes(from: Array(recent)),
+            standing: standing
         )
     }
 

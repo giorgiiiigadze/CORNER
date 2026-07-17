@@ -17,16 +17,33 @@ nonisolated struct TrainingProfile: Sendable, Codable, Equatable {
     var recentFocuses: [String] = []
     /// Free-text notes the app has learned, e.g. "said 'too fast' twice on hooks".
     var notes: [String] = []
+    /// What the fighter told the app in their own words: "my ribs are shot",
+    /// "I'm a southpaw". Kept apart from `notes` because that's strictly things
+    /// the app watched happen, and these are things it was told — a distinction
+    /// worth keeping when the two disagree.
+    var standing: [String] = []
 
     static let `default` = TrainingProfile()
 }
 
 nonisolated struct SessionRequest: Sendable {
+    /// What the setup sheet offers for `focus`.
+    ///
+    /// Lives next to the field rather than in the view because the default has
+    /// to *be* one of these: a `Picker` whose selection matches no tag silently
+    /// shows nothing selected. Keeping the list and the default in one place is
+    /// what stops them drifting apart again.
+    static let focusPresets = [
+        "Balanced", "Technique", "Power", "Conditioning", "Body work",
+        "Head movement", "Footwork", "Freestyle",
+    ]
+
     var rounds: Int = 6
     var roundSeconds: Int = 180
     var restSeconds: Int = 60
-    /// "technique", "power", "conditioning", "freestyle" — free text, it's a prompt.
-    var focus: String = "balanced"
+    /// One of `focusPresets`, but typed as free text because it becomes a line
+    /// in a prompt — "left hook, I keep dropping it" is a valid emphasis.
+    var focus: String = focusPresets[0]
     var profile: TrainingProfile = .default
 }
 
@@ -242,6 +259,19 @@ nonisolated struct SessionGenerator: Sendable {
 
         if !request.profile.notes.isEmpty {
             lines.append("What you know about them: \(request.profile.notes.joined(separator: "; ")).")
+        }
+
+        // Last, and stated as binding: this is the fighter speaking about their
+        // own body and history. Everything else in this prompt is inference from
+        // what they drilled; when the two disagree, they're right.
+        if !request.profile.standing.isEmpty {
+            let told = request.profile.standing.map { "- \($0)" }.joined(separator: "\n")
+            lines.append("""
+                The fighter told you this themselves. It outranks anything above \
+                that contradicts it, and it holds for every session, not just \
+                today:
+                \(told)
+                """)
         }
 
         lines.append("""
