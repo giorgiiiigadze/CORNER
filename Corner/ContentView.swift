@@ -93,8 +93,13 @@ struct ContentView: View {
 
     private var homePage: some View {
         List {
-            Section("Today") {
-                todaysSession
+            // Only when there's something to say. With no session written yet
+            // the call to action is the fixed bar below, not a row up here —
+            // an empty "Today" would just be a heading over nothing.
+            if isGenerating || planned != nil {
+                Section("Today") {
+                    todaysSession
+                }
             }
 
             // Under today's session rather than over it. Home's job is to get a
@@ -125,6 +130,29 @@ struct ContentView: View {
         // where there's no bar at all — an empty slab over the last card. The
         // header is meant to be pills and nothing else, so both go.
         .scrollEdgeEffectHidden(true, for: .all)
+        // Pinned under the list rather than in it, so the call to action is
+        // under the thumb no matter where the scroll ended up.
+        .safeAreaInset(edge: .bottom) {
+            if !isGenerating && planned == nil {
+                writeSessionButton
+            }
+        }
+    }
+
+    /// The start of everything, in the brand red the timer shares.
+    private var writeSessionButton: some View {
+        Button {
+            showingSetup = true
+        } label: {
+            Text("Write me a session")
+                .font(.headline)
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 18)
+                .background(Theme.Palette.accent, in: Capsule())
+        }
+        .padding(.horizontal, Theme.Layout.gutter)
+        .padding(.bottom, 8)
     }
 
     /// The AI-generated session. M2 makes this the hero card; for now it just
@@ -152,11 +180,6 @@ struct ContentView: View {
                     origin(planned.origin)
                 }
             }
-        } else {
-            Button("Write me a session") {
-                showingSetup = true
-            }
-            .foregroundStyle(Theme.Palette.accent)
         }
     }
 

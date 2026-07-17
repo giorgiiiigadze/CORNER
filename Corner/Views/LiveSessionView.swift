@@ -11,6 +11,10 @@ struct LiveSessionView: View {
     @State private var startupError: String?
     @Environment(\.dismiss) private var dismiss
 
+    /// The Lock Screen's copy of the clock. Owned here because this view owns
+    /// every exit, and an activity that outlives its session is a stuck timer.
+    @State private var liveActivity = SessionLiveActivity()
+
     /// Called once, with what actually happened, on the way out.
     private let onFinish: (SessionSummary) -> Void
 
@@ -24,6 +28,7 @@ struct LiveSessionView: View {
     /// on every exit, not just the tidy one.
     private func finish() async {
         let summary = engine.summary
+        liveActivity.end()
         await engine.end()
         onFinish(summary)
         dismiss()
@@ -58,6 +63,13 @@ struct LiveSessionView: View {
             guard finished else { return }
             Task { await finish() }
         }
+        // The Lock Screen mirror. Keyed to transitions, never to the tick —
+        // the system runs the widget's clock toward `endsAt` on its own, so
+        // updating on `secondsRemaining` would be sixty pushes a minute for
+        // nothing.
+        .onChange(of: engine.phase) { syncLiveActivity() }
+        .onChange(of: engine.isPaused) { syncLiveActivity() }
+        .onChange(of: engine.totalRounds) { syncLiveActivity() }
         .alert("Can't hear you", isPresented: .constant(startupError != nil)) {
             Button("OK") { dismiss() }
         } message: {
@@ -310,5 +322,61 @@ struct LiveSessionView: View {
         } catch {
             startupError = error.localizedDescription
         }
+    }
+
+    // MARK: - Live Activity
+
+    /// Makes the Lock Screen agree with the engine. Idle means nothing has
+    /// started, so there's nothing to show; the debrief ends the card — a
+    /// session that's over has no business on the Lock Screen.
+    private func syncLiveActivity() {
+        switch engine.phase {
+        case .idle:
+            break
+        case .announcing, .active, .resting:
+            liveActivity.sync(title: engine.summary.title, state: liveActivityState)
+        case .debrief:
+            liveActivity.end()
+        }
+    }
+
+    /// The engine's state, translated for the widget. `endsAt` only while a
+    /// countdown is genuinely running: the opener has no clock yet, and a
+    /// pause freezes the number instead — a target date would keep the
+    /// widget's clock falling through it.
+    private var liveActivityState: SessionActivityAttributes.ContentState {
+        var remaining = max(0, Int(engine.secondsRemaining.rounded()))
+        let phase: SessionActivityAttributes.Phase
+        var endsAt: Date?
+
+        if engine.isPaused {
+            phase = .paused
+        } else {
+            switch engine.phase {
+            case .active:
+                phase = .work
+                endsAt = Date(timeIntervalSinceNow: engine.secondsRemaining)
+            case .resting:
+                phase = .rest
+                endsAt = Date(timeIntervalSinceNow: engine.secondsRemaining)
+            case .announcing:
+                phase = .announcing
+                // `secondsRemaining` is still the previous countdown's zero
+                // while the opener is spoken — same trap `roundProgress`
+                // documents. Show the round about to start, not a dead 0:00.
+                remaining = engine.round?.durationSeconds ?? 0
+            case .idle, .debrief:
+                phase = .done
+            }
+        }
+
+        return SessionActivityAttributes.ContentState(
+            phase: phase,
+            roundIndex: engine.round?.index ?? 1,
+            totalRounds: engine.totalRounds,
+            focus: engine.round?.focus ?? "",
+            endsAt: endsAt,
+            secondsRemaining: remaining
+        )
     }
 }
