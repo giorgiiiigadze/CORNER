@@ -56,19 +56,4 @@ actor AudioCache {
         FileManager.default.fileExists(atPath: path(voiceID: voiceID, model: model, text: text).path)
     }
 
-    /// Bytes currently cached. Shown in Settings so the saving is visible.
-    func sizeOnDisk() -> Int64 {
-        let files = try? FileManager.default.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: [.fileSizeKey]
-        )
-        return (files ?? []).reduce(0) { total, url in
-            total + Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
-        }
-    }
-
-    func clear() {
-        let files = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
-        for file in files ?? [] { try? FileManager.default.removeItem(at: file) }
-    }
 }

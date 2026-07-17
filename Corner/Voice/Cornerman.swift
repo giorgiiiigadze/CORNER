@@ -74,17 +74,6 @@ final class Cornerman: Voice {
         synthesizer.speak(utterance)
     }
 
-    /// Prefers a premium or enhanced voice when the user has downloaded one —
-    /// the compact default is the single biggest thing that makes TTS sound cheap.
-    private static func bestAvailableVoice() -> AVSpeechSynthesisVoice? {
-        let language = AVSpeechSynthesisVoice.currentLanguageCode()
-        let candidates = AVSpeechSynthesisVoice.speechVoices()
-            .filter { $0.language == language }
-
-        return candidates.first { $0.quality == .premium }
-            ?? candidates.first { $0.quality == .enhanced }
-            ?? AVSpeechSynthesisVoice(language: language)
-    }
 }
 
 /// Bridges the synthesizer's delegate callbacks — which arrive on an unspecified
