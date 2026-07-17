@@ -2,264 +2,68 @@
   {
     "id": "intro-3",
     "title": "Intro",
-    "intro": "Three rounds today, and it's all about the basics being clean. Straight punches first, then hooks, then we add head movement. The one thing I want the whole way through: every hand comes straight back to your chin. Nothing else matters if you're open.",
+    "intro": "Three rounds on the basics, and clean beats hard every time. Every hand comes straight back to your chin \u2014 nothing else matters if you're open.",
     "rounds": [
       {
         "index": 1,
         "focus": "Straight punches",
         "durationSeconds": 180,
-        "restSeconds": 60,
-        "cornerTalk": "Good. Hands are dropping after the cross. Next round, snap it back to your chin every time.",
-        "combos": [
-          {
-            "display": "1",
-            "spoken": "jab"
-          },
-          {
-            "display": "1 - 1",
-            "spoken": "double jab"
-          },
-          {
-            "display": "1 - 2",
-            "spoken": "one, two"
-          },
-          {
-            "display": "1 - 1 - 2",
-            "spoken": "one, one, two"
-          },
-          {
-            "display": "2 - 1 - 2",
-            "spoken": "two, one, two"
-          }
-        ],
-        "cues": [
-          "Hands up.",
-          "Snap it back.",
-          "Chin down."
-        ]
+        "restSeconds": 60
       },
       {
         "index": 2,
         "focus": "Hooks",
         "durationSeconds": 180,
-        "restSeconds": 60,
-        "cornerTalk": "Turn that lead foot on the hook. You're arm punching. Last round, let's see some legs in it.",
-        "combos": [
-          {
-            "display": "1 - 2 - 3",
-            "spoken": "one, two, three"
-          },
-          {
-            "display": "3 - 2",
-            "spoken": "three, two"
-          },
-          {
-            "display": "1 - 2 - 3 - 2",
-            "spoken": "one, two, three, two"
-          },
-          {
-            "display": "2 - 3 - 2",
-            "spoken": "two, three, two"
-          }
-        ],
-        "cues": [
-          "Turn the hip over.",
-          "Tight elbow.",
-          "Hands up."
-        ]
+        "restSeconds": 60
       },
       {
         "index": 3,
         "focus": "Head movement",
         "durationSeconds": 180,
-        "restSeconds": 0,
-        "cornerTalk": null,
-        "combos": [
-          {
-            "display": "1 - 2 - slip",
-            "spoken": "one, two, slip"
-          },
-          {
-            "display": "slip - 2",
-            "spoken": "slip, cross"
-          },
-          {
-            "display": "1 - 2 - roll - 3",
-            "spoken": "one, two, roll, hook"
-          },
-          {
-            "display": "1 - slip - 1 - 2",
-            "spoken": "jab, slip, one, two"
-          }
-        ],
-        "cues": [
-          "Bend the knees.",
-          "Eyes on the bag.",
-          "Move after you punch."
-        ]
+        "restSeconds": 0
       }
     ]
   },
   {
     "id": "power-6",
     "title": "Power day",
-    "intro": "Six rounds and we're building to power. We start long and find the range, then we start sitting down on shots, then body, then uppercuts. Don't swing early \u2014 power comes from your legs turning, not your arms. Breathe out on every single punch.",
+    "intro": "Six rounds, building to power. It comes from your legs turning, not your arms, so don't swing early.",
     "rounds": [
       {
         "index": 1,
         "focus": "Range finding",
         "durationSeconds": 180,
-        "restSeconds": 60,
-        "cornerTalk": "Nice and long. Now start sitting down on the right hand.",
-        "combos": [
-          {
-            "display": "1",
-            "spoken": "jab"
-          },
-          {
-            "display": "1 - 1",
-            "spoken": "double jab"
-          },
-          {
-            "display": "1 - 2",
-            "spoken": "one, two"
-          }
-        ],
-        "cues": [
-          "Stay long.",
-          "Push off the back foot.",
-          "Hands up."
-        ]
+        "restSeconds": 60
       },
       {
         "index": 2,
         "focus": "Sitting on the cross",
         "durationSeconds": 180,
-        "restSeconds": 60,
-        "cornerTalk": "Better. Breathe out on every shot. Body next.",
-        "combos": [
-          {
-            "display": "1 - 2",
-            "spoken": "one, two"
-          },
-          {
-            "display": "1 - 2 - 2",
-            "spoken": "one, two, two"
-          },
-          {
-            "display": "2 - 3 - 2",
-            "spoken": "two, three, two"
-          }
-        ],
-        "cues": [
-          "Turn the hip over.",
-          "Sit on it.",
-          "Snap it back."
-        ]
+        "restSeconds": 60
       },
       {
         "index": 3,
         "focus": "Body shots",
         "durationSeconds": 180,
-        "restSeconds": 60,
-        "cornerTalk": "Bend the knees, don't bend the back. Shake it out.",
-        "combos": [
-          {
-            "display": "1 - 2b",
-            "spoken": "jab, cross to the body"
-          },
-          {
-            "display": "1 - 2 - 3b",
-            "spoken": "one, two, hook to the body"
-          },
-          {
-            "display": "2b - 3",
-            "spoken": "body, head hook"
-          }
-        ],
-        "cues": [
-          "Bend the knees.",
-          "Chin down.",
-          "Get low."
-        ]
+        "restSeconds": 60
       },
       {
         "index": 4,
         "focus": "Uppercuts",
         "durationSeconds": 180,
-        "restSeconds": 60,
-        "cornerTalk": "Short and up. You're swinging. Two rounds left, empty the tank.",
-        "combos": [
-          {
-            "display": "5 - 2",
-            "spoken": "uppercut, cross"
-          },
-          {
-            "display": "1 - 6 - 3",
-            "spoken": "jab, uppercut, hook"
-          },
-          {
-            "display": "5 - 6 - 3 - 2",
-            "spoken": "five, six, three, two"
-          }
-        ],
-        "cues": [
-          "Short and up.",
-          "Elbow in.",
-          "Hands up."
-        ]
+        "restSeconds": 60
       },
       {
         "index": 5,
         "focus": "Long combinations",
         "durationSeconds": 180,
-        "restSeconds": 60,
-        "cornerTalk": "One more. Everything you've got left.",
-        "combos": [
-          {
-            "display": "1 - 2 - 3 - 2 - 5",
-            "spoken": "one, two, three, two, uppercut"
-          },
-          {
-            "display": "1 - 1 - 2 - 3 - 2",
-            "spoken": "one, one, two, three, two"
-          },
-          {
-            "display": "1 - 2 - 5 - 2 - 3",
-            "spoken": "one, two, five, two, three"
-          }
-        ],
-        "cues": [
-          "Breathe.",
-          "Stay balanced.",
-          "Finish it."
-        ]
+        "restSeconds": 60
       },
       {
         "index": 6,
         "focus": "Empty the tank",
         "durationSeconds": 180,
-        "restSeconds": 0,
-        "cornerTalk": null,
-        "combos": [
-          {
-            "display": "1 - 2 - 3 - 2",
-            "spoken": "one, two, three, two"
-          },
-          {
-            "display": "OUT",
-            "spoken": "flurry! everything!"
-          },
-          {
-            "display": "1 - 2 - 5 - 2",
-            "spoken": "one, two, five, two"
-          }
-        ],
-        "cues": [
-          "Hands up.",
-          "Don't stop.",
-          "Breathe."
-        ]
+        "restSeconds": 0
       }
     ]
   }

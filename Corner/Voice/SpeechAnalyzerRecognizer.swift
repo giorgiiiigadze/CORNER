@@ -8,15 +8,16 @@ import os
 /// Three choices here carry the accuracy of the whole product:
 ///
 /// 1. **Contextual biasing.** `AnalysisContext.contextualStrings` is seeded with every
-///    command phrase, so the transcriber favours "slower" over "slow her" when a heavy
-///    bag is being hit two metres away. For a twelve-word grammar this is the single
+///    command phrase, so the transcriber favours "resume" over "reassume" when a heavy
+///    bag is being hit two metres away. For a grammar this small it's the single
 ///    biggest lever available.
 /// 2. **Volatile results.** Acting on tentative text rather than waiting for
-///    finalization is what makes "pause" feel immediate mid-combo. The exception is
+///    finalization is what makes "pause" feel immediate. The exception is
 ///    `.endSession` — see `handle(_:)`.
-/// 3. **Hard mute while speaking.** Audio is dropped, not merely ignored, while the
-///    cornerman talks. Corner talks contain phrases like "next round, snap it back",
-///    and an app that obeys its own voice would end the session on its own.
+/// 3. **Echo filtering, not muting.** The mic stays open while the cornerman
+///    speaks; his own words are discarded by matching them against the line he
+///    was handed. Dropping the audio outright was airtight and made him
+///    impossible to interrupt — see `isEcho` and the engine's barge-in.
 actor SpeechAnalyzerRecognizer: VoiceRecognizer {
 
     enum Failure: Error, LocalizedError {
@@ -61,18 +62,14 @@ actor SpeechAnalyzerRecognizer: VoiceRecognizer {
     private let commandStream: AsyncStream<VoiceCommand>
     private let transcriptContinuation: AsyncStream<String>.Continuation
     private let transcriptStream: AsyncStream<String>
-    private let unhandledContinuation: AsyncStream<String>.Continuation
-    private let unhandledStream: AsyncStream<String>
 
     var commands: AsyncStream<VoiceCommand> { commandStream }
     var transcripts: AsyncStream<String> { transcriptStream }
-    var unhandled: AsyncStream<String> { unhandledStream }
 
     init(locale: Locale = Locale.current) {
         self.locale = locale
         (commandStream, commandContinuation) = AsyncStream.makeStream(of: VoiceCommand.self)
         (transcriptStream, transcriptContinuation) = AsyncStream.makeStream(of: String.self)
-        (unhandledStream, unhandledContinuation) = AsyncStream.makeStream(of: String.self)
     }
 
     // MARK: - Lifecycle
@@ -150,7 +147,6 @@ actor SpeechAnalyzerRecognizer: VoiceRecognizer {
 
         commandContinuation.finish()
         transcriptContinuation.finish()
-        unhandledContinuation.finish()
         log.info("Recognizer stopped")
     }
 
@@ -320,18 +316,11 @@ actor SpeechAnalyzerRecognizer: VoiceRecognizer {
         let end = result.range.end
         guard end > consumedThrough else { return }
 
-        guard let command = self.command(in: result) else {
-            // Not one of the twelve. It might still be something worth answering
-            // — "give me something for the body" — so hand it up rather than
-            // dropping it. Gated because each one is a network call and money:
-            // finalized only (a half-heard "give me some…" is worth nothing),
-            // and at least two words (grunts and stray syllables aren't speech).
-            if result.isFinal, isWorthInterpreting(text) {
-                consumedThrough = end
-                unhandledContinuation.yield(text)
-            }
-            return
-        }
+        // Not one of the seven, so it's not for us. Speech that isn't a command
+        // used to be forwarded to Claude, who could change what was being
+        // drilled; there's nothing to drill now, so it's just talking. It still
+        // reaches `transcripts` above, which is what makes barge-in work.
+        guard let command = self.command(in: result) else { return }
 
         // Ending the session is the one irreversible command, so it alone waits for
         // a finalized transcript. Everything else is cheap to get wrong and
@@ -372,12 +361,6 @@ actor SpeechAnalyzerRecognizer: VoiceRecognizer {
     /// Two words minimum: "uh", "hah", a grunt between punches, and the mic
     /// catching a single word off a passing conversation are all noise, and the
     /// cornerman has nothing useful to say about them.
-    private func isWorthInterpreting(_ text: String) -> Bool {
-        CommandParser.normalize(text)
-            .split(separator: " ")
-            .count >= 2
-    }
-
     private func log(error: Error) {
         log.error("Recognition failed: \(error.localizedDescription, privacy: .public)")
     }

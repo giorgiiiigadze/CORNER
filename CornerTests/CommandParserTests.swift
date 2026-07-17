@@ -14,38 +14,34 @@ struct CommandParserTests {
         ("next", .nextRound),
         ("one more round", .oneMoreRound),
         ("one more", .oneMoreRound),
-        ("one more time", .again),
         ("another round", .oneMoreRound),
-        ("skip it", .skip),
     ])
     func resolvesOverlappingPhrases(input: String, expected: VoiceCommand) {
         #expect(CommandParser.parse(input) == expected)
     }
 
-    /// "One more round" is the trap: it contains "one more", and "one more time"
-    /// means something else entirely. Getting this wrong turns a request for an
-    /// extra round into a repeated combo.
-    @Test func oneMoreRoundIsNotOneMoreTime() {
-        #expect(CommandParser.parse("one more round") == .oneMoreRound)
-        #expect(CommandParser.parse("one more time") == .again)
-    }
-
-    // MARK: - Each of the twelve
+    // MARK: - Each of the seven
 
     @Test(arguments: [
         ("let's go", VoiceCommand.start), ("lets go", .start), ("start", .start), ("begin", .start),
         ("pause", .pause), ("hold on", .pause), ("wait", .pause),
         ("resume", .resume), ("keep going", .resume), ("continue", .resume),
-        ("stop", .stop),
-        ("slower", .slower), ("slow down", .slower), ("too fast", .slower),
-        ("faster", .faster), ("speed up", .faster), ("harder", .faster), ("too slow", .faster),
-        ("again", .again), ("repeat", .again),
-        ("skip", .skip),
+        ("next round", .nextRound), ("next", .nextRound),
+        ("one more round", .oneMoreRound), ("another round", .oneMoreRound),
         ("how much time", .timeCheck), ("time check", .timeCheck), ("how long", .timeCheck),
         ("end session", .endSession), ("i'm done", .endSession), ("that's it", .endSession),
     ])
     func recognizesCommand(input: String, expected: VoiceCommand) {
         #expect(CommandParser.parse(input) == expected)
+    }
+
+    /// The five that went when the callouts did. A fighter who says "faster" out
+    /// of habit gets silence, which is honest — there's no pace to change. Left
+    /// mapped to anything, they'd be understood and do nothing, and the fighter
+    /// couldn't tell which.
+    @Test(arguments: ["skip", "skip it", "again", "repeat", "stop", "slower", "slow down", "faster", "speed up", "harder"])
+    func theCalloutCommandsAreGone(input: String) {
+        #expect(CommandParser.parse(input) == nil)
     }
 
     @Test func everyCommandHasAtLeastOnePhrase() {
@@ -60,7 +56,7 @@ struct CommandParserTests {
     /// A transcript arrives with filler around it; nobody says a bare keyword.
     @Test(arguments: [
         ("okay pause", VoiceCommand.pause),
-        ("uh, can you go slower", .slower),
+        ("uh, can we go to the next round", .nextRound),
         ("alright let's go", .start),
         ("hey, how much time is left", .timeCheck),
     ])
@@ -72,7 +68,6 @@ struct CommandParserTests {
     @Test func mostRecentCommandWins() {
         #expect(CommandParser.parse("lets go pause") == .pause)
         #expect(CommandParser.parse("pause resume") == .resume)
-        #expect(CommandParser.parse("slower faster") == .faster)
     }
 
     @Test(arguments: ["PAUSE!", "Pause.", "  pause  "])
@@ -82,8 +77,9 @@ struct CommandParserTests {
 
     // MARK: - Silence
 
-    /// A false positive is worse than a miss: combos are counted aloud, and
-    /// "one two three" must never be mistaken for a command.
+    /// A false positive is worse than a miss. The fighter works in silence now,
+    /// so anything the mic picks up is them breathing, their music, or someone
+    /// else in the room — and none of it should touch the session.
     @Test(arguments: ["", "   ", "one two three", "hello there", "jab cross hook"])
     func staysSilentWhenNoCommandIsPresent(input: String) {
         #expect(CommandParser.parse(input) == nil)

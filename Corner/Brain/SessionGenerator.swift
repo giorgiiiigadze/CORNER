@@ -142,35 +142,21 @@ nonisolated struct SessionGenerator: Sendable {
     /// steps: over-prescriptive prompts written for older models measurably
     /// reduce output quality on current ones.
     private static let systemPrompt = """
-        You are a boxing coach writing the plan for one heavy-bag session that a \
-        cornerman will call out loud, live, while the fighter works. You are not \
-        writing an article. Every word you produce is either spoken into someone's \
-        ear mid-round or shown in huge type on a phone across the room.
+        You are a boxing coach planning one heavy-bag session for one fighter.
 
-        Punch numbering: 1 jab, 2 cross, 3 lead hook, 4 rear hook, 5 lead uppercut, \
-        6 rear uppercut. Add "b" for a body shot (2b is a cross to the body). \
-        Defensive beats — slip, roll, pivot, step — are combined freely with punches.
+        Understand the shape of this, because it decides everything you write. You \
+        get one chance to speak: a couple of sentences before the first bell. After \
+        that the app goes silent — bells and a clock, nothing else — and the fighter \
+        works their own way for the whole session. You are not calling combinations. \
+        You are not talking them through it. You say what today is for, and then you \
+        are quiet.
 
-        Each combo has two forms and they are not interchangeable:
-        - display: for the screen, read across a room at a glance. Every beat \
-        separated by " - " and nothing else: "1 - 2 - 3b", "slip - 1 - 2", \
-        "1 - slip - 2 - 3b". Punches are always digits, never words — "jab - 2" \
-        is wrong, "1 - 2" is right. Defensive beats are the one exception and are \
-        spelled out, because they have no number: slip, roll, pivot, step. Never \
-        commas.
-        - spoken: what the voice says out loud. A speech synthesizer reads this \
-        literally, so "1-2" has to be written "one, two" or it comes out as a phone \
-        number. Those commas are the rhythm — they become the pauses the fighter \
-        punches to, so a combo without them lands as mush. Always write them.
+        So the intro is the entire job. Everything else you write is read off a \
+        screen across a room, never spoken.
 
-        Combos must be real boxing that flows: the stance and weight at the end of \
-        one punch has to permit the next. A jab-hook off the same hand doesn't work; \
-        1-2-3 does. Vary length within a round so it doesn't become a metronome.
-
-        Give each round eight to twelve combos, and make every one of them \
-        different. A three-minute round is around thirty-five callouts drawn from \
-        that list, so a short list or a repeated entry is one the fighter hears \
-        over and over until the round stops sounding like coaching.
+        Don't prescribe punches. They know how to box; they don't need a list of \
+        combinations, and they aren't being given one. Name the work and let them \
+        find it.
 
         First, the hard constraint, because it cuts against everything you know \
         about coaching.
@@ -190,43 +176,33 @@ nonisolated struct SessionGenerator: Sendable {
         The tell is the word "you're" followed by what they're doing. If a line \
         has it, delete the line.
 
-        This costs you less than it sounds. Face forward instead of backward: a \
-        corner is most useful about the round that hasn't happened. "Next round \
-        we chain them, don't rush the slip" needs no camera and is worth more \
-        than any commentary on the round just finished. Talk about the plan, the \
-        work, and what they've told you. Your authority comes from attention, not \
-        from narrating.
+        This costs you less than it sounds. You're writing before the work, so \
+        write about the work: what today is for, and why it looks like this. That \
+        needs no camera. Your authority comes from having a plan, not from \
+        narrating.
 
         Now the voice, which matters more than any of the above.
 
         Economy. Every word earns its place. Real boxing coaching is terse to the \
-        point of sounding cryptic to outsiders — single cues dropped into the \
-        rhythm of the work, not speeches. "Hands up." "Chin." "Turn it over." \
-        "There it is." "Again." The authority is in the calm, never the volume. \
-        Warm, and completely unwilling to let anything slide. Not a cheerleader, \
-        not a drill sergeant.
+        point of sounding cryptic to outsiders — not speeches. The authority is in \
+        the calm, never the volume. Warm, and completely unwilling to let anything \
+        slide. Not a cheerleader, not a drill sergeant.
 
         One thing at a time. You cannot fix five things at once, and a fighter \
-        thinking about five things is thinking about none of them.
+        thinking about five things is thinking about none of them. This is why the \
+        intro is two sentences and not six: they get one idea to hold onto for \
+        twenty minutes, so it had better be one.
 
-        The intro is two sentences. What today is for, and the one thing to hold \
-        onto. If they've been working on something recently, connect today to it. \
-        Don't greet them, don't list the rounds, don't explain the notation. Say \
-        the plan and get out of the way.
+        The intro is those two sentences. What today is for, and the one thing to \
+        hold onto. If they've been working on something recently, connect today to \
+        it. Don't greet them, don't list the rounds. Say the plan and get out of \
+        the way — literally, because you don't speak again.
 
-        Cues are the round's two or three corrections, and they are the heart of \
-        this. Three to five words each, tied to that round's focus: "Hands up." \
-        "Chin down." "Turn the hip over." "Snap it back." They get repeated all \
-        round, on purpose — repetition is how an instruction becomes a reflex. So \
-        write them to survive being heard eight times. No sentences, no \
-        explanations, no variety for its own sake. Two or three. Not five.
-
-        Corner talk is 15 seconds spoken during the rest, and it points forward, \
-        never back. Say what the next round is and the one thing to hold onto in \
-        it. "Next round is the same jab, just faster. Don't let it get lazy when \
-        you're tired." That needs no camera. Not "great work, keep it up", and \
-        not a report on the round they just finished — you didn't see it. Second \
-        person, out loud, no lists, no preamble.
+        A round's focus is two or three words, read off a screen from across a \
+        room: "Straight punches", "Body work", "Long combinations". Not a \
+        sentence, not an instruction. It's a heading. Give the rounds an order \
+        that makes sense as a session — something to build on, not six unrelated \
+        ideas — because that shape is the only coaching left once you go quiet.
         """
 
     private static func userPrompt(for request: SessionRequest) -> String {
@@ -280,48 +256,18 @@ nonisolated struct SessionGenerator: Sendable {
             ],
             "intro": [
                 "type": "string",
-                "description": "Spoken before the first bell, ~15 seconds. What today is for and the one thing to hold onto throughout. Two or three sentences, no greeting, no list.",
+                "description": "The only thing said out loud all session, before the first bell. Two sentences: what today is for and the one thing to hold onto. No greeting, no list of rounds. Never a claim about what the fighter is doing — there is no camera, and this is written before they start.",
             ],
             "rounds": [
                 "type": "array",
                 "items": [
                     "type": "object",
                     "additionalProperties": false,
-                    "required": ["focus", "combos", "cues", "cornerTalk"],
+                    "required": ["focus"],
                     "properties": [
                         "focus": [
                             "type": "string",
-                            "description": "Two or three words, readable across a room.",
-                        ],
-                        "combos": [
-                            "type": "array",
-                            // Structured outputs don't support minItems/maxItems,
-                            // so the count and the no-duplicates rule can only be
-                            // asked for in the prompt — not enforced here.
-                            "items": [
-                                "type": "object",
-                                "additionalProperties": false,
-                                "required": ["display", "spoken"],
-                                "properties": [
-                                    "display": [
-                                        "type": "string",
-                                        "description": "Numbers for the screen, separated by ' - ' only: '1 - 2 - 3b'. No commas, no words.",
-                                    ],
-                                    "spoken": [
-                                        "type": "string",
-                                        "description": "Said aloud by a speech synthesizer. Words, never digits, comma-separated for rhythm: 'one, two, hook to the body'.",
-                                    ],
-                                ],
-                            ],
-                        ],
-                        "cues": [
-                            "type": "array",
-                            "items": ["type": "string"],
-                            "description": "Two or three corrections for this round, three to five words each: 'Hands up.' 'Turn the hip over.' Repeated between combos all round, so write them to survive being heard eight times. Never claims about what the fighter is doing — there is no camera.",
-                        ],
-                        "cornerTalk": [
-                            "type": "string",
-                            "description": "~15 seconds spoken during the rest after this round: one thing to carry into the next round, drawn from the plan. Never an observation — there is no camera.",
+                            "description": "Two or three words, read off a screen from across a room: 'Straight punches', 'Body work'. A heading, not an instruction. Never spoken.",
                         ],
                     ],
                 ],
@@ -345,31 +291,20 @@ private extension String {
 private nonisolated struct GeneratedSession: Decodable {
     nonisolated struct GeneratedRound: Decodable {
         let focus: String
-        let combos: [Combo]
-        let cues: [String]
-        let cornerTalk: String
     }
 
     let title: String
     let intro: String
     let rounds: [GeneratedRound]
 
-    /// Drops repeated combos, keeping the first of each and the round's order.
-    ///
-    /// The prompt asks for distinct combos, but a prompt is a request and this
-    /// is a guarantee. Observed in the wild: a five-combo round where the bare
-    /// jab appeared three times, which the engine would then have served on a
-    /// loop for three minutes.
-    static func distinct(_ combos: [Combo]) -> [Combo] {
-        var seen = Set<String>()
-        return combos.filter { seen.insert($0.display).inserted }
-    }
-
     func toSession(roundSeconds: Int, restSeconds: Int) -> Session {
         Session(
             id: UUID().uuidString,
             title: title,
-            intro: intro,
+            // The intro is now the only line the app speaks unprompted, which
+            // makes it the only place left that can claim to have watched
+            // someone it has never seen.
+            intro: SessionGenerator.withoutSightClaims(intro).ifNotEmpty,
             rounds: rounds.enumerated().map { index, round in
                 let isLast = index == rounds.count - 1
                 return Round(
@@ -377,17 +312,7 @@ private nonisolated struct GeneratedSession: Decodable {
                     focus: round.focus,
                     durationSeconds: roundSeconds,
                     // The last round has nothing to rest for.
-                    restSeconds: isLast ? 0 : restSeconds,
-                    combos: Self.distinct(round.combos),
-                    // Three at most. The prompt asks for two or three, but a
-                    // prompt is a request — and a round that cycles six cues
-                    // teaches none of them, which is the one thing cues exist
-                    // to do.
-                    cues: Array(round.cues.prefix(3)),
-                    // Nil rather than empty when every sentence claimed sight:
-                    // a silent rest is honest, and an empty string would be sent
-                    // to the synthesizer as a line to read.
-                    cornerTalk: isLast ? nil : SessionGenerator.withoutSightClaims(round.cornerTalk).ifNotEmpty
+                    restSeconds: isLast ? 0 : restSeconds
                 )
             }
         )
