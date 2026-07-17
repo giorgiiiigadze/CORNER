@@ -299,7 +299,11 @@ nonisolated struct SessionGenerator: Sendable {
 private extension String {
     /// Nil when there's nothing left to say, so callers can't hand a synthesizer
     /// an empty line to read.
-    var ifNotEmpty: String? {
+    ///
+    /// `nonisolated` because the project builds with
+    /// `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, which pins even a `String`
+    /// extension to the main actor — and `toSession` is nonisolated.
+    nonisolated var ifNotEmpty: String? {
         trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : self
     }
 }
