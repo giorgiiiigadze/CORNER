@@ -94,10 +94,6 @@ final class SessionEngine {
     private var pauseWaiters: [CheckedContinuation<Void, Never>] = []
     private var bonusRounds: [Round] = []
 
-    /// The line being spoken right now, or nil when the cornerman is quiet.
-    /// Read by the transcript stream to know whether there's anything to cut off.
-    private var speaking: String?
-
     /// Counts lines so a finished one can tell whether it's still the current
     /// one before lowering the echo filter behind a newer line's back.
     private var speechGeneration = 0
@@ -136,7 +132,7 @@ final class SessionEngine {
         // that dead time is exactly the budget a cloud voice needs. By the time
         // they say "let's go", the intro is already sitting on disk.
         Task { [voice, session] in
-            await voice.prewarm(Self.spokenLines(of: session))
+            await voice.prewarm(Self.openingLines(of: session))
         }
 
         try await recognizer.start()
@@ -153,45 +149,9 @@ final class SessionEngine {
         let transcripts = await recognizer.transcripts
         transcriptTask = Task { [weak self] in
             for await text in transcripts {
-                guard let self else { return }
-                self.lastHeard = text
-                await self.bargeIn(on: text)
+                self?.lastHeard = text
             }
         }
-    }
-
-    /// Stops the cornerman mid-word because the fighter started talking.
-    ///
-    /// Fires on volatile results — the first syllable, not the finished sentence
-    /// — because the whole point is to stop *before* talking over someone. What
-    /// they're saying doesn't matter yet and often isn't known yet; that they're
-    /// saying anything is enough. The command lands a moment later through its
-    /// own path.
-    ///
-    /// Still earns its place with the coach mostly silent: the intro is the one
-    /// long line left, and it's exactly the one a fighter talks over to get going.
-    ///
-    /// The recognizer has already discarded the cornerman's own voice, so
-    /// whatever arrives here while he's speaking is a real voice in the room.
-    /// What it hasn't discarded is a voice that already got what it asked for.
-    private func bargeIn(on text: String) async {
-        guard speaking != nil else { return }
-
-        // A command speaks for itself, so it never barges in. `pause` cancels the
-        // line in its own handler; `start` must not cancel the very line it just
-        // started.
-        //
-        // That last one was cutting the intro off mid-sentence, every session.
-        // "Let's go" fires `start`, the session begins, the intro starts playing
-        // — and the recognizer is still finalizing that same "let's go". Those
-        // trailing results are a real voice saying real words, so the echo filter
-        // passed them through exactly as designed, and the fighter's own command
-        // cut off the answer to it. The transcript stream publishes results the
-        // recognizer has already acted on, so being a real voice isn't enough;
-        // it has to be a voice that hasn't been served yet.
-        guard CommandParser.parse(text) == nil else { return }
-
-        await voice.cancel()
     }
 
     func end() async {
@@ -226,9 +186,11 @@ final class SessionEngine {
         case .pause:
             guard !isPaused, phase != .idle else { return }
             isPaused = true
-            // Cut the line off mid-word. A cornerman who finishes his sentence
-            // after you've said stop isn't paused.
-            await voice.cancel()
+            // Deliberately doesn't cut off whatever he's saying. It used to, back
+            // when he talked over a running clock — a cornerman still calling
+            // combos after you've said stop isn't paused. He only speaks before
+            // the bell now, so there's no clock running to stop and nothing the
+            // interruption would buy. The pause lands at the next countdown.
 
         case .resume:
             guard isPaused else { return }
@@ -263,12 +225,38 @@ final class SessionEngine {
     /// spoken, so there's nothing left to fetch as rounds approach — the whole
     /// session's audio is three lines, and only the intro is unique to it.
     ///
+    /// What the cornerman says as a round opens, assembled in one place.
+    ///
+    /// One function because two callers need this string and they must agree to
+    /// the character: the engine says it, and the prefetcher fetches it a round
+    /// early. The cache key is a hash of the text, so a stray comma between them
+    /// isn't a mismatch anyone would notice — it's a miss, a fighter waiting on a
+    /// network call at the bell, and the same words billed twice.
+    ///
+    /// The number and focus are the app's, not the model's; there's no reason to
+    /// let Claude get numbering wrong when a loop index is exact.
+    nonisolated static func openerLine(for round: Round) -> String {
+        var line = "Round \(round.index). \(round.focus)."
+        if let opener = round.opener {
+            line += " \(opener)"
+        }
+        return line
+    }
+
+    /// Everything needed before the first bell — and nothing more.
+    ///
+    /// Deliberately not the whole session. A cloud voice charges per character,
+    /// so fetching round six here means paying for it before the user has said
+    /// "let's go", and paying again for every session they open and back out of.
+    /// Round six is twenty minutes away; it can wait until round five.
+    ///
     /// Time-check answers aren't here on purpose: there are ~180 of them, they're
     /// only heard when asked for, and they're identical in every session forever,
     /// so they cost one fetch each ever and then come from the cache.
-    nonisolated static func spokenLines(of session: Session) -> [String] {
+    nonisolated static func openingLines(of session: Session) -> [String] {
         var lines: [String] = []
         if let intro = session.intro { lines.append(intro) }
+        if let first = session.rounds.first { lines.append(openerLine(for: first)) }
         lines.append(contentsOf: ["That's the session. Well done.", "Session over. Good work."])
         return lines
     }
@@ -283,8 +271,8 @@ final class SessionEngine {
         var index = 0
         var rounds = session.rounds
 
-        // Before the first bell: what today is for. This is the only thing the
-        // app says unprompted all session, so it's carrying the entire plan.
+        // Before the first bell: what today is for, and the one thing to hold
+        // onto all the way through.
         if let intro = session.intro {
             phase = .announcing
             await say(intro)
@@ -295,6 +283,22 @@ final class SessionEngine {
             guard !Task.isCancelled else { return }
             let round = rounds[index]
             self.round = round
+
+            // Fetch the next round's line now, while this one is being worked.
+            // Three minutes of slack is far more than a cloud voice needs, and it
+            // means a session abandoned at round two never pays for round six.
+            if index + 1 < rounds.count {
+                let next = rounds[index + 1]
+                Task { [voice] in await voice.prewarm([Self.openerLine(for: next)]) }
+            }
+
+            // What this round is and the one thing to hold in it, then the bell.
+            // In that order: the bell means start punching and nothing else, and
+            // a line said over a running clock is three minutes that became two
+            // minutes fifty.
+            phase = .announcing
+            await say(Self.openerLine(for: round))
+            guard !Task.isCancelled else { return }
 
             phase = .active
             bell.ring()
@@ -354,6 +358,10 @@ final class SessionEngine {
         let next = Round(
             index: (session.rounds.last?.index ?? 0) + bonusRounds.count + 1,
             focus: "One more",
+            // Nothing to say about a round the fighter invented on the spot.
+            // Claude planned the session; this one wasn't in it, and inventing a
+            // coaching line for it would mean guessing. "Round 7. One more."
+            opener: nil,
             durationSeconds: template.durationSeconds,
             restSeconds: 0
         )
@@ -364,22 +372,22 @@ final class SessionEngine {
     // MARK: - Speech
 
     /// Speaks, and tells the recognizer what's being said so it can ignore itself.
+    ///
+    /// Every line runs to the end. Nothing cancels one: the fighter can't
+    /// interrupt, and no command tries to. His lines are short and they all land
+    /// before the clock starts, so there is nothing an interruption would save —
+    /// and cutting the intro off mid-sentence, which is what actually happened,
+    /// is the whole cost of allowing it.
     private func say(_ text: String) async {
-        // The ears stay open through every line, including this one.
-        //
-        // They used to close for anything that could make the app obey itself,
-        // which worked and meant the fighter could not interrupt the intro at the
-        // top of every session. Handing over the script instead of closing the
-        // mic keeps the protection and gives back the interruption: the
-        // recognizer drops these exact words and hears everything else.
+        // The mic stays open throughout, but the recognizer is handed the script
+        // so it can drop these exact words. Without that, an intro ending "let's
+        // go" or an opener saying "save it for the next round" is a command the
+        // app gives itself.
         speechGeneration += 1
         let generation = speechGeneration
 
-        speaking = text
         await recognizer.setSpeaking(text)
-
         await voice.say(text)
-        speaking = nil
 
         // Audio is still draining out of the speaker when `say` returns, and that
         // tail echoes like the rest of the line — so the filter outlives the line

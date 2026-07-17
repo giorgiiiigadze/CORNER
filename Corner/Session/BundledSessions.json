@@ -2,23 +2,26 @@
   {
     "id": "intro-3",
     "title": "Intro",
-    "intro": "Three rounds on the basics, and clean beats hard every time. Every hand comes straight back to your chin \u2014 nothing else matters if you're open.",
+    "intro": "Three rounds on the basics, and clean beats hard every time. Every hand comes straight back to your chin — nothing else matters if you're open.",
     "rounds": [
       {
         "index": 1,
         "focus": "Straight punches",
+        "opener": "Long and straight, and everything comes back to your chin.",
         "durationSeconds": 180,
         "restSeconds": 60
       },
       {
         "index": 2,
         "focus": "Hooks",
+        "opener": "Turn the hip and let the shoulder follow — don't arm it.",
         "durationSeconds": 180,
         "restSeconds": 60
       },
       {
         "index": 3,
         "focus": "Head movement",
+        "opener": "Move your head first, then punch. Never one without the other.",
         "durationSeconds": 180,
         "restSeconds": 0
       }
@@ -32,36 +35,42 @@
       {
         "index": 1,
         "focus": "Range finding",
+        "opener": "Find the distance before you commit to anything.",
         "durationSeconds": 180,
         "restSeconds": 60
       },
       {
         "index": 2,
         "focus": "Sitting on the cross",
+        "opener": "Sit down on it. Your legs throw this punch, not your arm.",
         "durationSeconds": 180,
         "restSeconds": 60
       },
       {
         "index": 3,
         "focus": "Body shots",
+        "opener": "Bend your knees to get there, don't bend your back.",
         "durationSeconds": 180,
         "restSeconds": 60
       },
       {
         "index": 4,
         "focus": "Uppercuts",
+        "opener": "Short and up, from underneath. Don't wind it up.",
         "durationSeconds": 180,
         "restSeconds": 60
       },
       {
         "index": 5,
         "focus": "Long combinations",
+        "opener": "Keep breathing through the long ones — out on every punch.",
         "durationSeconds": 180,
         "restSeconds": 60
       },
       {
         "index": 6,
         "focus": "Empty the tank",
+        "opener": "Whatever's left, it goes here. Nothing saved.",
         "durationSeconds": 180,
         "restSeconds": 0
       }

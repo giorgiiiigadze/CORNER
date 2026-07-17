@@ -9,14 +9,17 @@ private actor FakeVoice: Voice {
     private(set) var prewarmed: [String] = []
     private(set) var didStopPrewarming = false
 
-    /// When held, `say` suspends until `cancel` — which is what a real line does:
-    /// it occupies seconds of wall clock and returns early when cut off. Without
-    /// this, every line is instantaneous and there is no window in which to be
-    /// interrupted, so barge-in can't be tested at all.
+    /// When held, `say` suspends until `finish` — a real line occupies seconds of
+    /// wall clock, and without that there's no window in which to observe what
+    /// happens *during* one. Ordering claims ("the line lands before the bell")
+    /// are untestable against a voice that returns instantly.
     private var holdsLines = false
     private var inProgress: CheckedContinuation<Void, Never>?
 
     func hold() { holdsLines = true }
+
+    /// Lets the line currently playing reach its end.
+    func finish() { resumeInProgress() }
 
     func say(_ text: String) async {
         lines.append(text)
@@ -26,6 +29,10 @@ private actor FakeVoice: Voice {
 
     func cancel() async {
         cancelCount += 1
+        resumeInProgress()
+    }
+
+    private func resumeInProgress() {
         inProgress?.resume()
         inProgress = nil
     }
@@ -100,8 +107,14 @@ private let testSession = Session(
     title: "Test",
     intro: "Two rounds. Keep your hands up.",
     rounds: [
-        Round(index: 1, focus: "Straight punches", durationSeconds: 180, restSeconds: 60),
-        Round(index: 2, focus: "Hooks", durationSeconds: 180, restSeconds: 0),
+        Round(
+            index: 1, focus: "Straight punches", opener: "Long and straight.",
+            durationSeconds: 180, restSeconds: 60
+        ),
+        Round(
+            index: 2, focus: "Hooks", opener: "Turn the hip.",
+            durationSeconds: 180, restSeconds: 0
+        ),
     ]
 )
 
@@ -171,120 +184,133 @@ struct SessionEngineTests {
         #expect(engine.round?.focus == "Straight punches")
     }
 
-    // MARK: - Silence
+    // MARK: - A sentence, then the bell
 
-    /// The whole point of the rewrite. The cornerman says what today is for and
-    /// then shuts up: a round is a bell, three minutes, and a bell.
-    ///
-    /// If this fails, something started talking during a round again — which is
-    /// the exact thing that was removed, and it costs money per line.
-    @Test func aRoundIsBellSilenceBell() async throws {
+    /// The order is the point. The bell means one thing — start punching — and a
+    /// line said over a running clock turns three minutes into two-fifty.
+    @Test func theOpenerIsSaidBeforeTheBell() async throws {
         let (engine, voice, recognizer, bell) = makeEngine()
+        await voice.hold()
         try await engine.beginListening()
         await recognizer.hear(.start)
         await settle()
 
-        #expect(bell.rings == 1, "the round opens on the bell")
+        // Parked mid-intro: nothing has rung yet.
+        #expect(bell.rings == 0)
 
-        let spoken = await voice.lines
-        #expect(spoken == ["Two rounds. Keep your hands up."], "the intro, and then nothing")
+        await voice.finish()   // intro
+        await settle()
+        #expect(await voice.lines.last == "Round 1. Straight punches. Long and straight.")
+        #expect(bell.rings == 0, "the round-one line lands before the bell, not after")
+
+        await voice.finish()   // round one's opener
+        await settle()
+        #expect(bell.rings == 1)
+        #expect(engine.phase == .active)
     }
 
-    @Test func theIntroIsSaidBeforeTheFirstBell() async throws {
+    /// Silence is still the default once the bell goes: he says his sentence and
+    /// gets out of the way. If this fails, something started talking over a
+    /// running round again — which costs money per line and is the thing the
+    /// whole rewrite removed.
+    @Test func nothingIsSaidDuringTheRoundItself() async throws {
         let (engine, voice, recognizer, _) = makeEngine()
         try await engine.beginListening()
         await recognizer.hear(.start)
         await settle()
 
-        #expect(await voice.lines.first == "Two rounds. Keep your hands up.")
-        #expect(engine.phase == .active, "and the round starts without waiting to be asked")
+        #expect(await voice.lines == [
+            "Two rounds. Keep your hands up.",
+            "Round 1. Straight punches. Long and straight.",
+        ])
+    }
+
+    /// A round with nothing honest left to say still announces itself. The
+    /// alternative is a bell out of nowhere.
+    @Test func aRoundWithNoOpenerStillAnnouncesItself() {
+        let round = Round(index: 3, focus: "Body work", opener: nil, durationSeconds: 180, restSeconds: 0)
+        #expect(SessionEngine.openerLine(for: round) == "Round 3. Body work.")
     }
 
     // MARK: - What gets paid for
 
-    /// The money test, re-anchored.
-    ///
-    /// It used to assert that round two's *combos* weren't fetched up front. With
-    /// no combos that assertion is vacuously true and tests nothing, so it now
-    /// pins the real guarantee: the entire session is three lines, and only the
-    /// intro is unique to it. Anything else appearing here is a per-session bill
-    /// nobody agreed to.
-    @Test func theWholeSessionIsThreeLines() async throws {
-        let lines = SessionEngine.spokenLines(of: testSession)
+    /// The money test. Fetching the whole session the moment the live screen
+    /// opens means paying for round six before "let's go" — and paying again
+    /// every time someone opens a session and backs out.
+    @Test func theOpeningDoesNotPayForLaterRounds() async throws {
+        let lines = SessionEngine.openingLines(of: testSession)
 
-        #expect(lines == [
-            "Two rounds. Keep your hands up.",
-            "That's the session. Well done.",
-            "Session over. Good work.",
-        ])
+        #expect(lines.contains("Two rounds. Keep your hands up."))
+        #expect(lines.contains("Round 1. Straight punches. Long and straight."))
+        #expect(!lines.contains { $0.contains("Hooks") }, "round two waits until round one is being worked")
     }
 
     /// Time-check answers are deliberately absent: ~180 of them, only heard when
     /// asked for, and identical in every session forever. Fetching them all up
     /// front would pay for 178 lines nobody hears.
     @Test func theOpeningDoesNotPayForTimeChecks() async throws {
-        let lines = SessionEngine.spokenLines(of: testSession)
+        let lines = SessionEngine.openingLines(of: testSession)
         #expect(!lines.contains { $0.contains("left in the round") })
     }
 
-    @Test func nothingPerRoundIsFetched() async throws {
-        let (engine, voice, _, _) = makeEngine()
-        try await engine.beginListening()
-        await settle()
-
-        let warmed = await voice.prewarmed
-        #expect(warmed.contains("Two rounds. Keep your hands up."))
-        #expect(!warmed.contains { $0.contains("Hooks") }, "a round's focus is read, not spoken")
-        #expect(warmed.count == 3)
-    }
-
-    // MARK: - Barge-in
-
-    /// Still earns its place with the coach nearly silent: the intro is the one
-    /// long line left, and it's exactly the one a fighter talks over.
-    @Test func stopsTalkingWhenTheFighterSpeaks() async throws {
+    /// Round two arrives while round one is being worked — three minutes of
+    /// slack, so it's ready without ever being paid for early.
+    @Test func theNextRoundIsFetchedDuringTheCurrentOne() async throws {
         let (engine, voice, recognizer, _) = makeEngine()
-        await voice.hold()
         try await engine.beginListening()
         await recognizer.hear(.start)
         await settle()
 
-        // The engine is now suspended part-way through the intro.
-        #expect(await voice.cancelCount == 0, "precondition: nothing interrupted yet")
-
-        // Not a command, and not even a finished sentence — the first syllables
-        // are the point. Waiting for a parse would mean talking over the fighter
-        // for the length of whatever they're saying.
-        await recognizer.transcribe("hey give me")
-        await settle()
-
-        #expect(await voice.cancelCount == 1, "speech during a line must cut the cornerman off")
+        #expect(await voice.prewarmed.contains("Round 2. Hooks. Turn the hip."))
     }
 
-    /// The intro was cut off mid-sentence, every single session, and this is why.
+    /// The cache is keyed on a hash of the text, so the line the prefetcher
+    /// fetched and the line the engine says have to match to the character.
+    /// Diverge and nothing warns you: it's a miss, a stall at the bell, and the
+    /// same words billed twice. This is why `openerLine` exists.
+    @Test func theLineFetchedIsExactlyTheLineSaid() async throws {
+        let (engine, voice, recognizer, _) = makeEngine()
+        try await engine.beginListening()
+        await recognizer.hear(.start)
+        await settle()
+
+        let warmed = Set(await voice.prewarmed)
+        for line in await voice.lines {
+            #expect(warmed.contains(line), "\"\(line)\" was spoken but never fetched — cache miss at the bell")
+        }
+    }
+
+    // MARK: - Nothing cuts him off
+
+    /// Barge-in is gone, and this is the shape of its absence.
     ///
-    /// "Let's go" starts the session; the intro begins; the recognizer is still
-    /// finalizing that same "let's go" and publishes it again. It's a real voice
-    /// saying real words, so the echo filter passes it — and the fighter's own
-    /// command kills the answer to it.
-    @Test func theCommandThatStartedTheSessionDoesNotCutItOff() async throws {
+    /// It existed to interrupt a three-minute stream of combo callouts you needed
+    /// to talk over. There's no stream: he says one sentence before each bell and
+    /// stops. So there's nothing an interruption would save, and allowing one cost
+    /// real money — the fighter's own "let's go" was still being finalized as the
+    /// intro started, and cut it off mid-sentence every single session.
+    @Test func speechDoesNotCutHimOff() async throws {
         let (engine, voice, recognizer, _) = makeEngine()
         await voice.hold()
         try await engine.beginListening()
         await recognizer.hear(.start)
         await settle()
 
-        // The recognizer finishing with the utterance it already acted on.
+        // The recognizer finishing with the utterance it already acted on — the
+        // exact thing that was chopping the intro.
         await recognizer.transcribe("lets go")
+        // And someone talking over him, which is now simply his problem to ignore.
+        await recognizer.transcribe("hey give me something")
         await settle()
 
-        #expect(await voice.cancelCount == 0, "the intro must survive the command that asked for it")
+        #expect(await voice.cancelCount == 0, "his lines run to the end, always")
+        #expect(engine.phase == .announcing, "still mid-intro")
     }
 
-    /// Commands don't barge in because they cut the line themselves where it
-    /// makes sense to — `pause` in its own handler. This is what makes the rule
-    /// above safe rather than a loophole.
-    @Test func pauseStillStopsHimMidLine() async throws {
+    /// `pause` is about the clock, and his lines land before the clock starts —
+    /// so it has nothing to interrupt either. It still pauses; he just finishes
+    /// his sentence first.
+    @Test func pauseDoesNotCutHimOff() async throws {
         let (engine, voice, recognizer, _) = makeEngine()
         await voice.hold()
         try await engine.beginListening()
@@ -293,19 +319,8 @@ struct SessionEngineTests {
         await recognizer.hear(.pause)
         await settle()
 
-        #expect(await voice.cancelCount == 1, "pause must still cut the intro off")
-    }
-
-    /// The mirror, and the reason it can't just cancel on every transcript:
-    /// nothing is playing, so there's nothing to interrupt.
-    @Test func doesNotBargeInWhenTheCornermanIsQuiet() async throws {
-        let (engine, voice, recognizer, _) = makeEngine()
-        try await engine.beginListening()
-
-        await recognizer.transcribe("just talking to myself")
-        await settle()
-
-        #expect(await voice.cancelCount == 0, "nothing is playing — nothing to cut off")
+        #expect(engine.isPaused)
+        #expect(await voice.cancelCount == 0, "the intro finishes; the pause lands at the countdown")
     }
 
     /// The protection that must survive dropping the mute: the recognizer can
@@ -326,18 +341,6 @@ struct SessionEngineTests {
     }
 
     // MARK: - Commands
-
-    @Test func pauseFreezesAndCutsTheCurrentLine() async throws {
-        let (engine, voice, recognizer, _) = makeEngine()
-        try await engine.beginListening()
-        await recognizer.hear(.start)
-        await settle()
-        await recognizer.hear(.pause)
-        await settle()
-
-        #expect(engine.isPaused)
-        #expect(await voice.cancelCount >= 1, "a cornerman who finishes his sentence isn't paused")
-    }
 
     @Test func resumeUnfreezes() async throws {
         let (engine, _, recognizer, _) = makeEngine()

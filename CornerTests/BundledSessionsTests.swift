@@ -47,6 +47,33 @@ struct BundledSessionsTests {
         }
     }
 
+    /// Without an opener the offline session is a bell out of nowhere, six times.
+    /// Nothing else catches this: the field is optional, so a missing one decodes
+    /// clean and just goes quiet.
+    @Test func everyRoundHasSomethingToSay() throws {
+        for session in try BundledSessions.load() {
+            for round in session.rounds {
+                let opener = round.opener ?? ""
+                #expect(!opener.isEmpty, "\(session.title) round \(round.index) says nothing at the bell")
+            }
+        }
+    }
+
+    /// The app already says "Round two. Hooks." before the opener lands, so an
+    /// opener that repeats either is the coach talking to himself.
+    @Test func openersDoNotRepeatWhatIsAlreadySaid() throws {
+        for session in try BundledSessions.load() {
+            for round in session.rounds {
+                let opener = (round.opener ?? "").lowercased()
+                #expect(!opener.contains("round \(round.index)"), "\"\(opener)\" repeats the round number")
+                #expect(
+                    !opener.contains(round.focus.lowercased()),
+                    "\"\(opener)\" repeats the focus back"
+                )
+            }
+        }
+    }
+
     /// The last round has nothing to rest for, and resting after it would leave
     /// the fighter standing there waiting for a bell that means nothing.
     @Test func theLastRoundHasNoRest() throws {
