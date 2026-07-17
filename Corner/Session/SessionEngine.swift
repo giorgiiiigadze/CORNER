@@ -32,7 +32,12 @@ extension VoiceCommand {
     /// and another, and another. The echo filter catches it right up until one
     /// word comes back garbled and the match fails. `acknowledgementsAreNotCommands`
     /// is what actually holds this.
-    var acknowledgement: String? {
+    ///
+    /// `nonisolated` because the project builds with
+    /// `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, which would otherwise pin this
+    /// to the main actor — and `openingLines(of:)` is nonisolated and reads it
+    /// through a key path, which Swift 6 rejects outright.
+    nonisolated var acknowledgement: String? {
         switch self {
         case .pause: "Pausing."
         case .resume: "Back to work."
