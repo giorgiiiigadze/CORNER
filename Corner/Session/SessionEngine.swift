@@ -14,6 +14,35 @@ nonisolated struct SystemTicker: Ticker {
     }
 }
 
+extension VoiceCommand {
+
+    /// What the cornerman says back.
+    ///
+    /// Without this, "pause" is silence and a number that stopped changing on a
+    /// screen across the room — indistinguishable from not being heard at all.
+    /// You'd have to walk over and look, which is the one thing the app promises
+    /// you never have to do.
+    ///
+    /// Nil where the action already answers for itself: `start` is followed by the
+    /// intro, `timeCheck` and `endSession` speak, and there's no point saying
+    /// "moving on" before saying "moving on".
+    ///
+    /// **Never put a command phrase in one of these.** "One more at the end"
+    /// contains "one more", so the app hearing itself would queue another round —
+    /// and another, and another. The echo filter catches it right up until one
+    /// word comes back garbled and the match fails. `acknowledgementsAreNotCommands`
+    /// is what actually holds this.
+    var acknowledgement: String? {
+        switch self {
+        case .pause: "Pausing."
+        case .resume: "Back to work."
+        case .nextRound: "Moving on."
+        case .oneMoreRound: "Adding a round at the end."
+        case .start, .timeCheck, .endSession: nil
+        }
+    }
+}
+
 /// The bell, as the engine sees it.
 ///
 /// A protocol only so tests can count rings — a test can't hear the real one, and
@@ -191,17 +220,21 @@ final class SessionEngine {
             // combos after you've said stop isn't paused. He only speaks before
             // the bell now, so there's no clock running to stop and nothing the
             // interruption would buy. The pause lands at the next countdown.
+            await acknowledge(command)
 
         case .resume:
             guard isPaused else { return }
             isPaused = false
             resumeWaiters()
+            await acknowledge(command)
 
         case .nextRound:
             skipToNextRound()
+            await acknowledge(command)
 
         case .oneMoreRound:
             addBonusRound()
+            await acknowledge(command)
 
         case .timeCheck:
             // The one place the app speaks during a round, and only because it
@@ -214,6 +247,16 @@ final class SessionEngine {
             await say("Session over. Good work.")
             await end()
         }
+    }
+
+    /// Says the confirmation, if the command has one.
+    ///
+    /// Always *after* the state has already changed, never before. The line takes
+    /// a second to play, and a "pausing" that arrives before the clock actually
+    /// stops is a promise, not a confirmation.
+    private func acknowledge(_ command: VoiceCommand) async {
+        guard let line = command.acknowledgement else { return }
+        await say(line)
     }
 
     // MARK: - Session flow
@@ -257,6 +300,14 @@ final class SessionEngine {
         var lines: [String] = []
         if let intro = session.intro { lines.append(intro) }
         if let first = session.rounds.first { lines.append(openerLine(for: first)) }
+
+        // Answers that can land at any moment, so they can't be fetched when
+        // they're due — a "pausing" that arrives a second after the pause is
+        // worse than none, because by then you've already said it again.
+        //
+        // They're the same words in every session forever, so this is one fetch
+        // each, ever, and free from the second session on.
+        lines.append(contentsOf: VoiceCommand.allCases.compactMap(\.acknowledgement))
         lines.append(contentsOf: ["That's the session. Well done.", "Session over. Good work."])
         return lines
     }

@@ -232,6 +232,62 @@ struct SessionEngineTests {
         #expect(SessionEngine.openerLine(for: round) == "Round 3. Body work.")
     }
 
+    // MARK: - Answering back
+
+    /// The one that matters, and the reason these lines are worded the way they
+    /// are rather than the obvious way.
+    ///
+    /// "One more at the end" is the natural thing to say for `oneMoreRound` — and
+    /// it contains "one more", so the app hearing its own voice would queue
+    /// another round, then hear itself again. The echo filter stops that right up
+    /// until one word comes back garbled and the match fails.
+    ///
+    /// Exhaustive over `allCases`, so a command added later can't quietly bring a
+    /// self-triggering line with it.
+    @Test func acknowledgementsAreNotCommands() {
+        for command in VoiceCommand.allCases {
+            guard let line = command.acknowledgement else { continue }
+            #expect(
+                CommandParser.parse(line) == nil,
+                "\"\(line)\" parses as \(CommandParser.parse(line)?.rawValue ?? "") — the app would obey itself"
+            )
+        }
+    }
+
+    @Test func pauseSaysSo() async throws {
+        let (engine, voice, recognizer, _) = makeEngine()
+        try await engine.beginListening()
+        await recognizer.hear(.start)
+        await settle()
+        await recognizer.hear(.pause)
+        await settle()
+
+        #expect(engine.isPaused)
+        #expect(await voice.lines.last == "Pausing.")
+    }
+
+    /// A command that was ignored says nothing. Silence means "that did nothing",
+    /// which is true — "resume" when you aren't paused shouldn't sound like it
+    /// worked.
+    @Test func anIgnoredCommandIsNotAcknowledged() async throws {
+        let (engine, voice, recognizer, _) = makeEngine()
+        try await engine.beginListening()
+        await recognizer.hear(.resume)   // never paused
+        await settle()
+
+        #expect(await voice.lines.isEmpty)
+    }
+
+    /// Same trap as the round openers: an answer fetched when it's due is an
+    /// answer that arrives too late to be one.
+    @Test func acknowledgementsAreFetchedUpFront() async throws {
+        let warmed = Set(SessionEngine.openingLines(of: testSession))
+        for command in VoiceCommand.allCases {
+            guard let line = command.acknowledgement else { continue }
+            #expect(warmed.contains(line), "\"\(line)\" would stall on a network call")
+        }
+    }
+
     // MARK: - What gets paid for
 
     /// The money test. Fetching the whole session the moment the live screen
