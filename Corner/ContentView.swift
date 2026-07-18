@@ -58,10 +58,12 @@ struct ContentView: View {
                 destination(.settings) { SettingsView() }
             }
         }
-        // The bar gets out of the way as you read down a list and comes back the
-        // moment you reach for it — the behaviour every iOS 26 app has, which is
-        // exactly the point of being native.
-        .tabBarMinimizeBehavior(.onScrollDown)
+        // All four tabs, all the time. The iOS 26 minimize gesture collapses the
+        // bar to the selected tab alone as you scroll, which reads as the other
+        // three having disappeared — and this app's whole navigation is four
+        // destinations wide. Trading that legibility for a few points of list
+        // height isn't worth it here.
+        .tabBarMinimizeBehavior(.never)
         .tint(Theme.Palette.accent)
         .preferredColorScheme(.light)
         .sheet(isPresented: $showingSetup) {
@@ -259,8 +261,16 @@ struct ContentView: View {
     }
 
     private func requestSpeechAccess() async -> Bool {
+        // `nonisolated(nonsending)` is *not* what's wanted here, and neither is
+        // plain inference: the project builds with
+        // `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, which pins this closure to
+        // the main actor — but `requestAuthorization` calls back on an arbitrary
+        // background queue. Swift 6 compiles that isolation into a runtime queue
+        // assertion, so the callback trapped in `_dispatch_assert_queue_fail`
+        // every single time Start was tapped. `@Sendable` opts the closure out of
+        // the default isolation, which is the truth: it runs wherever Speech says.
         await withCheckedContinuation { continuation in
-            SFSpeechRecognizer.requestAuthorization { status in
+            SFSpeechRecognizer.requestAuthorization { @Sendable status in
                 continuation.resume(returning: status == .authorized)
             }
         }

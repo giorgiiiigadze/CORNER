@@ -43,8 +43,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		31199F6C300B8E8900B107DB /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		31214C373008D8BE000153C7 /* Corner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Corner.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		3162552C300AA2D8004BF769 /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		C0DE00000000000000000000 /* CornerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CornerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C0DE00000000000000000101 /* SessionActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SessionActivityAttributes.swift; path = Corner/Session/SessionActivityAttributes.swift; sourceTree = "<group>"; };
 		C0DE00000000000000000103 /* CornerWidgetsExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CornerWidgetsExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -96,12 +96,12 @@
 		31214C2E3008D8BE000153C7 = {
 			isa = PBXGroup;
 			children = (
-				3162552C300AA2D8004BF769 /* Secrets.xcconfig */,
 				31214C393008D8BE000153C7 /* Corner */,
 				C0DE00000000000000000001 /* CornerTests */,
 				C0DE00000000000000000106 /* CornerWidgets */,
 				31214C383008D8BE000153C7 /* Products */,
 				31747E48300B6D8E007417F8 /* Recovered References */,
+				31199F6C300B8E8900B107DB /* Secrets.xcconfig */,
 			);
 			sourceTree = "<group>";
 		};
@@ -421,7 +421,7 @@
 		};
 		31214C433008D8BF000153C7 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 3162552C300AA2D8004BF769 /* Secrets.xcconfig */;
+			baseConfigurationReference = 31199F6C300B8E8900B107DB /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -457,7 +457,7 @@
 		};
 		31214C443008D8BF000153C7 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 3162552C300AA2D8004BF769 /* Secrets.xcconfig */;
+			baseConfigurationReference = 31199F6C300B8E8900B107DB /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
