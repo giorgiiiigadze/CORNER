@@ -3,7 +3,8 @@ import Speech
 import SwiftData
 import SwiftUI
 
-/// The shell: the header, and whichever of the three pages it's pointing at.
+/// The shell: the system tab bar, and whichever of the four pages it's pointing
+/// at.
 ///
 /// Session state lives here rather than in `HomePage` because it outlives the
 /// page — you can wander to History mid-generation and come back to a finished
@@ -39,30 +40,29 @@ struct ContentView: View {
     }
 
     var body: some View {
-        // A paging TabView rather than a `switch`, so the pages can also be
-        // swiped between. Same binding as the header, so tapping a pill and
-        // swiping are the same gesture by other means. The dots are off —
-        // the header is already the indicator.
+        // The system tab bar, not a facsimile of one. The pills we drew at the
+        // top were a tab bar in everything but provenance — they cost us the
+        // scroll-edge behaviour, the minimise-on-scroll, the accessibility
+        // wiring and the large titles, all of which arrive free here.
         TabView(selection: $page) {
-            homePage
-                .tag(Page.home)
-            CoachPage(profile: profile)
-                .tag(Page.coach)
-            HistoryPage(history: history, onDelete: delete)
-                .tag(Page.history)
-            SettingsView()
-                .tag(Page.settings)
+            Tab(Page.home.title, systemImage: Page.home.icon, value: .home) {
+                destination(Page.home) { homePage }
+            }
+            Tab(Page.coach.title, systemImage: Page.coach.icon, value: .coach) {
+                destination(.coach) { CoachPage(profile: profile) }
+            }
+            Tab(Page.history.title, systemImage: Page.history.icon, value: .history) {
+                destination(.history) { HistoryPage(history: history, onDelete: delete) }
+            }
+            Tab(Page.settings.title, systemImage: Page.settings.icon, value: .settings) {
+                destination(.settings) { SettingsView() }
+            }
         }
-        .tabViewStyle(.page(indexDisplayMode: .never))
-        // `safeAreaInset` rather than stacking the header above this in a VStack:
-        // it reserves the header's height so nothing starts underneath it, while
-        // still letting the lists scroll *behind* it. That second half is what
-        // the header's material has to blur — in a VStack there's nothing back
-        // there but flat colour, and a blur over flat colour is just colour.
-        .safeAreaInset(edge: .top, spacing: 0) {
-            CornerHeader(page: $page)
-        }
-        .background(Theme.Palette.background)
+        // The bar gets out of the way as you read down a list and comes back the
+        // moment you reach for it — the behaviour every iOS 26 app has, which is
+        // exactly the point of being native.
+        .tabBarMinimizeBehavior(.onScrollDown)
+        .tint(Theme.Palette.accent)
         .preferredColorScheme(.light)
         .sheet(isPresented: $showingSetup) {
             SessionSetupSheet(request: $request) {
@@ -89,16 +89,52 @@ struct ContentView: View {
         }
     }
 
+    /// Every tab gets its own stack and a large title, which is the other half
+    /// of what "native" means here: the title used to be the widest pill in our
+    /// own bar, and now it's where iOS puts it — collapsing into the nav bar as
+    /// you scroll, without us animating anything.
+    private func destination<Content: View>(
+        _ page: Page,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        NavigationStack {
+            content()
+                .navigationTitle(page.title)
+                .background(Theme.Palette.background)
+        }
+    }
+
     // MARK: - Home
 
     private var homePage: some View {
         List {
-            // Only when there's something to say. With no session written yet
-            // the call to action is the fixed bar below, not a row up here —
-            // an empty "Today" would just be a heading over nothing.
-            if isGenerating || planned != nil {
-                Section("Today") {
-                    todaysSession
+            // Always present, in all three states — that's what lets it be the
+            // only call to action on the screen. There used to be a "Today"
+            // section that appeared only once a session existed, and a red
+            // button pinned to the bottom for when one didn't; the card is both,
+            // so neither is here any more.
+            Section {
+                TodaySessionCard(
+                    state: cardState,
+                    onStart: start,
+                    onRegenerate: { showingSetup = true }
+                )
+                // Same insets as the dashboard below: the list style already
+                // insets the section, and a row inset is charged on top of it.
+                .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 12, trailing: 0))
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+            }
+            .listSectionMargins(.horizontal, 16)
+
+            // Directly under the card rather than at the foot of the screen: a
+            // failure to write today's session is about the card, and an error
+            // parked below the dashboard is an error nobody reads.
+            if let problem {
+                Section {
+                    Text(problem)
+                        .font(.subheadline)
+                        .foregroundStyle(.red)
                 }
             }
 
@@ -117,86 +153,36 @@ struct ContentView: View {
             }
             .listSectionMargins(.horizontal, 16)
 
-            if let problem {
-                Section("Problem") {
-                    Text(problem).foregroundStyle(.red)
-                }
-            }
         }
         .scrollContentBackground(.hidden)
-        // iOS 26 washes the edges of a scroll view where it meets a bar, and
-        // ours meets one it doesn't know about: the header is a `safeAreaInset`,
-        // so the system tints behind it, and pours the same wash at the bottom
-        // where there's no bar at all — an empty slab over the last card. The
-        // header is meant to be pills and nothing else, so both go.
-        .scrollEdgeEffectHidden(true, for: .all)
-        // Pinned under the list rather than in it, so the call to action is
-        // under the thumb no matter where the scroll ended up.
-        .safeAreaInset(edge: .bottom) {
-            if !isGenerating && planned == nil {
-                writeSessionButton
-            }
-        }
     }
 
-    /// The start of everything, in the brand red the timer shares.
-    private var writeSessionButton: some View {
-        Button {
-            showingSetup = true
-        } label: {
-            Text("Write me a session")
-                .font(.headline)
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 18)
-                .background(Theme.Palette.accent, in: Capsule())
-        }
-        .padding(.horizontal, Theme.Layout.gutter)
-        .padding(.bottom, 8)
+    /// Home's three states, in the card's terms. The order matters: generating
+    /// wins over a session already on screen, so asking for "something else"
+    /// puts the card straight into its loading state rather than leaving the old
+    /// session sitting there looking startable.
+    private var cardState: TodaySessionCard.State {
+        if isGenerating { return .loading }
+        guard let planned else { return .empty }
+
+        let session = planned.session
+        return .ready(
+            TodaySessionCard.Plan(
+                // The first round's focus: the session's opening intent, and the
+                // closest the plan has to a one-word answer to "what's today?".
+                focus: session.rounds.first?.focus ?? session.title,
+                subtitle: session.intro ?? session.title,
+                roundCount: session.rounds.count,
+                totalSeconds: session.rounds.reduce(0) { $0 + $1.durationSeconds + $1.restSeconds },
+                origin: planned.origin
+            )
+        )
     }
 
-    /// The AI-generated session. M2 makes this the hero card; for now it just
-    /// has to prove the brain works.
-    @ViewBuilder
-    private var todaysSession: some View {
-        if isGenerating {
-            HStack(spacing: 12) {
-                ProgressView()
-                Text("The cornerman is writing your session\u{2026}")
-                    .font(.subheadline)
-                    .foregroundStyle(Theme.Palette.secondaryText)
-            }
-        } else if let planned {
-            Button {
-                Task { await launch(planned.session) }
-            } label: {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(planned.session.title)
-                        .font(.headline)
-                        .foregroundStyle(Theme.Palette.primaryText)
-                    Text(summary(of: planned.session))
-                        .font(.subheadline)
-                        .foregroundStyle(Theme.Palette.secondaryText)
-                    origin(planned.origin)
-                }
-            }
-        }
-    }
-
-    /// Says plainly whether Claude wrote this or whether it's the shipped JSON.
-    /// Silently serving a fallback would make the moat impossible to evaluate.
-    @ViewBuilder
-    private func origin(_ origin: SessionOrigin) -> some View {
-        switch origin {
-        case .claude:
-            Label("Written for you just now", systemImage: "sparkles")
-                .font(.caption)
-                .foregroundStyle(Theme.Palette.accent)
-        case .bundled(let reason):
-            Label("Offline session \u{2014} \(reason)", systemImage: "wifi.slash")
-                .font(.caption)
-                .foregroundStyle(Theme.Palette.secondaryText)
-        }
+    /// Bridges the card's plain closure to the async launch.
+    private func start() {
+        guard let planned else { return }
+        Task { await launch(planned.session) }
     }
 
     private func generate() async {

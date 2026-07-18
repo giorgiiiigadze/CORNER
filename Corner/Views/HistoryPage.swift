@@ -33,8 +33,6 @@ struct HistoryPage: View {
                 .onDelete(perform: onDelete)
             }
             .scrollContentBackground(.hidden)
-            // As on home: no system wash behind the header, none at the bottom.
-            .scrollEdgeEffectHidden(true, for: .all)
         }
     }
 

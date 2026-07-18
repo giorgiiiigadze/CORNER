@@ -61,8 +61,6 @@ struct CoachPage: View {
             }
         }
         .scrollContentBackground(.hidden)
-        // As on home: no system wash behind the header, none at the bottom.
-        .scrollEdgeEffectHidden(true, for: .all)
     }
 
     /// A row rather than a toolbar button: the empty state and the add control

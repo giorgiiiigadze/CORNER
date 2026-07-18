@@ -8,8 +8,8 @@ import SwiftUI
 /// screen is where the brand lives; spending personality here would only make
 /// the app feel less like Apple built it.
 ///
-/// A page under the header rather than a sheet, so it has no title bar and
-/// nothing to dismiss — the header is how you leave.
+/// A tab rather than a sheet, so there's nothing to dismiss — the tab bar is
+/// how you leave.
 struct SettingsView: View {
 
 
@@ -40,8 +40,6 @@ struct SettingsView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        // As on home: no system wash behind the header, none at the bottom.
-        .scrollEdgeEffectHidden(true, for: .all)
         .task { await loadCornermanVoices() }
     }
 
