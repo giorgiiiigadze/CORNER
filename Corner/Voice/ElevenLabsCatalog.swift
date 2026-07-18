@@ -72,7 +72,7 @@ nonisolated struct ElevenLabsCatalog: Sendable {
     /// Every voice on the account, for the picker.
     static func load() async throws -> [Entry] {
         guard let key = Bundle.main.object(forInfoDictionaryKey: "ELEVENLABS_API_KEY") as? String,
-              key.hasPrefix("sk_")
+              !key.isEmpty
         else { throw Failure.missingKey }
 
         var request = URLRequest(url: URL(string: "https://api.elevenlabs.io/v1/voices")!)

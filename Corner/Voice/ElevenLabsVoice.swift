@@ -52,8 +52,11 @@ actor ElevenLabsVoice: Voice {
     /// Nil when there's no key, so the app quietly stays on the native voice
     /// rather than failing.
     static func fromBundle(fallback: any Voice) -> ElevenLabsVoice? {
+        // Unset in Secrets.xcconfig, the substitution leaves an empty string, so
+        // that — not any prefix — is the real test. ElevenLabs has issued both
+        // bare-hex and sk_-prefixed keys; matching on a format rejects valid ones.
         guard let key = Bundle.main.object(forInfoDictionaryKey: "ELEVENLABS_API_KEY") as? String,
-              key.hasPrefix("sk_")
+              !key.isEmpty
         else { return nil }
 
         let voiceID = UserDefaults.standard.string(forKey: preferenceKey) ?? ElevenLabsCatalog.defaultVoiceID
