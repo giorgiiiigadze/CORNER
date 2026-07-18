@@ -124,6 +124,19 @@ private struct GateTicker: Ticker {
     }
 }
 
+/// A clock that actually runs, for the few behaviours a parked one can't show.
+///
+/// Skipping is one: `skipToNextRound` sets `secondsRemaining` to zero, but the
+/// countdown only reads it after a sleep returns — under `GateTicker` that's an
+/// hour away, so the skip never lands. Five milliseconds a second puts a
+/// three-minute round under a second while still leaving a command room to
+/// arrive mid-round.
+private struct FastTicker: Ticker {
+    func sleep(for duration: Duration) async throws {
+        try await Task.sleep(for: .milliseconds(5))
+    }
+}
+
 // MARK: - Fixture
 
 private let testSession = Session(
@@ -146,7 +159,8 @@ private let testSession = Session(
 struct SessionEngineTests {
 
     private func makeEngine(
-        intent: (any IntentReader)? = nil
+        intent: (any IntentReader)? = nil,
+        ticker: any Ticker = GateTicker()
     ) -> (SessionEngine, FakeVoice, FakeRecognizer, FakeBell) {
         let voice = FakeVoice()
         let recognizer = FakeRecognizer()
@@ -156,7 +170,7 @@ struct SessionEngineTests {
             voice: voice,
             recognizer: recognizer,
             intent: intent,
-            ticker: GateTicker(),
+            ticker: ticker,
             bell: bell
         )
         return (engine, voice, recognizer, bell)
@@ -300,6 +314,47 @@ struct SessionEngineTests {
         await settle()
         #expect(bell.rings == 1)
         #expect(engine.phase == .active)
+    }
+
+    /// Walking out of a round is one transition, so it gets one bell.
+    ///
+    /// The round-one bell, then "next round", then the round-two opener and its
+    /// bell — two rings total. A third would be the old behaviour: the round
+    /// ending and the round starting each ringing, a sentence apart, which
+    /// sounds like a mistake rather than a transition.
+    @Test func skippingARoundRingsOnce() async throws {
+        let (engine, voice, recognizer, bell) = makeEngine(ticker: FastTicker())
+        try await engine.beginListening()
+        await recognizer.hear(.start)
+        #expect(await eventually { engine.phase == .active }, "round one under way")
+        #expect(bell.rings == 1, "round one's bell")
+
+        await recognizer.hear(.nextRound)
+
+        // Round two being active means its bell has already gone — the engine
+        // rings and then counts down. So the count here is the whole story: two
+        // if the handover rang once, three if round one's ending rang too.
+        #expect(await eventually { engine.round?.index == 2 && engine.phase == .active })
+        #expect(bell.rings == 2, "one bell for one transition, not two")
+        #expect(await voice.lines.contains("Moving on."), "the skip answers itself in words")
+    }
+
+    /// Walking out of the *last* round still rings, because nothing follows it
+    /// to do the job. There the bell is the session ending, not a handover.
+    @Test func skippingTheLastRoundStillRings() async throws {
+        let (engine, _, recognizer, bell) = makeEngine(ticker: FastTicker())
+        try await engine.beginListening()
+        await recognizer.hear(.start)
+        #expect(await eventually { engine.phase == .active })
+
+        await recognizer.hear(.nextRound)   // out of round one, into round two
+        #expect(await eventually { engine.round?.index == 2 && engine.phase == .active })
+        #expect(bell.rings == 2)
+
+        await recognizer.hear(.nextRound)   // out of round two, which is the last
+
+        #expect(await eventually { engine.phase == .debrief })
+        #expect(bell.rings == 3, "the last round's bell is the session ending")
     }
 
     /// Silence is still the default once the bell goes: he says his sentence and

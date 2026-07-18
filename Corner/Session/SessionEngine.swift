@@ -509,17 +509,29 @@ final class SessionEngine {
             // Read before anything else can set it again.
             let walkedOut = consumeSkip()
 
-            // Ends the round and opens the rest in one stroke, the way a real
-            // bell does — there aren't two sounds, there's one transition.
-            bell.ring()
-
-            // A round requested mid-session lands after the current one.
+            // A round requested mid-session lands after the current one. Ahead
+            // of the bell below, because appending here is what decides whether
+            // this round is the last one.
             if !bonusRounds.isEmpty {
                 rounds.append(contentsOf: bonusRounds)
                 bonusRounds.removeAll()
             }
 
             let isLast = index == rounds.count - 1
+
+            // Ends the round and opens the rest in one stroke, the way a real
+            // bell does — there aren't two sounds, there's one transition.
+            //
+            // Unless the fighter walked out of the round and another follows. A
+            // skip already answers itself: they said "next round", heard "moving
+            // on", and the next opener and its bell are seconds behind this. One
+            // transition would arrive as two rings with a sentence wedged
+            // between them. A round that ran its course still earns its bell,
+            // and so does the last one — there the bell is the session ending,
+            // and nothing rings after it.
+            if !walkedOut || isLast {
+                bell.ring()
+            }
 
             // "Next round" means the next round. Resting here is what made the
             // command mean two different things depending on when it was said:

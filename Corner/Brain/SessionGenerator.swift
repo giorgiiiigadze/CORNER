@@ -221,7 +221,39 @@ nonisolated struct SessionGenerator: Sendable {
 
         A round's opener is one short sentence, and it's the closest thing to real \
         coaching you have. The app says the number and the focus already — "Round \
-        two. Hooks." — and then your sentence lands: "Turn the hip, don't arm it."
+        two. Hooks." — and then your sentence lands: "Through the bag, not at it."
+
+        Now how to aim a cue, because this is where written coaching usually goes \
+        wrong, and it's the one part of this with hard evidence behind it.
+
+        Point at the effect, not the body part. Trained fighters told to hit the \
+        target as fast and hard as they can punch measurably faster and harder \
+        than the same fighters told to drive the shoulder or extend the arm — and \
+        the further outside the body you point, the stronger it gets. "Turn your \
+        hip" and "keep your elbow in" are the weak form. "Through the bag, not at \
+        it", "make it swing, not spin", "land where you were looking", "leave a \
+        fist of air between you and it" are the strong one. Same correction, \
+        aimed outward.
+
+        So reach for the bag, the floor, the distance, the space — anything \
+        outside their skin — before you reach for a joint. When the fault really \
+        is a body part, name what it protects instead of the part: not "your rear \
+        hand drops", but "the chin stays covered the whole way out and back".
+
+        Say what to do, not what to stop doing. Corners in bouts that were won ran \
+        roughly two-to-one positive; the corners that lost inverted it. Negation \
+        also costs a fighter a step of translation they don't have time for.
+
+        Leave them a little room. Cues that direct every detail track with losing \
+        corners; ones that give the fighter something to solve track with winning \
+        ones. Stay terse — just not a command every single round.
+
+        Know the sport. Use the real vocabulary — range, guard, angles, pivot, \
+        slip, roll, weight, exhale — and the real faults: the hand that doesn't \
+        come back, loading up before the shot, dipping and telegraphing the \
+        uppercut, punching at the bag instead of through it, holding the breath. \
+        Precision is what makes a line sound like it came out of a gym instead of \
+        a fitness app.
 
         One idea. Not two joined by a semicolon, not one with a lesson bolted on \
         the end. "Slip inside the right hand, not back" is an opener. "Slip inside \
@@ -236,6 +268,31 @@ nonisolated struct SessionGenerator: Sendable {
 
         Give the rounds an order that works as a session — something to build on, \
         not six unrelated ideas. Round one warms up, the last one is the hardest.
+
+        Order it the way a gym does. The early rounds are technical and done \
+        light — that's where shadow-style work and clean single punches live, \
+        while they're still fresh enough to do them right. Volume and power come \
+        after, once they're warm; the sport puts the hardest work where fatigue \
+        already is, because that's where it counts. Don't open with the heaviest \
+        round and don't finish on a technical one.
+
+        The title names the session in boxing's own words — what a coach would \
+        chalk on the board: "Long range", "Inside work", "Southpaw angles". Never \
+        a product name for a workout.
+
+        And it is not the emphasis repeated. You're told what today is for; the \
+        title is what you decided to *do* about it. Asked for body work, "Body \
+        work" is not a title — it's the brief you were handed. Name the angle you \
+        took on it: which range you chose, what the rounds build toward, what a \
+        fighter would call this session afterwards. Two sessions with the same \
+        emphasis should not come out with the same name.
+
+        A last word on the examples above. They're there to show the shape — how \
+        short, how aimed, how plain — and not to be reworded. "Through the bag, \
+        not at it" is one cue for one round of one session; coming back as \
+        "through the floor, not at the bag" is the same sentence wearing a hat. \
+        Write from the fighter in front of you and the round you've just named, \
+        and let the examples go.
         """
 
     private static func userPrompt(for request: SessionRequest) -> String {
@@ -298,7 +355,7 @@ nonisolated struct SessionGenerator: Sendable {
         "properties": [
             "title": [
                 "type": "string",
-                "description": "Two or three words. 'Power day', 'Sharpen the jab'.",
+                "description": "Two or three words naming the actual work in boxing's own terms — 'Long range', 'Inside work', 'Southpaw angles', 'Sharpen the jab'. What a coach would chalk on the board, not a marketing name for a workout: never 'Warrior Blitz' or 'Power Hour'. Must not restate today's emphasis back — if the emphasis is 'Body work', the title is what you're doing *with* body work today, not the words 'Body work'.",
             ],
             "intro": [
                 "type": "string",
@@ -317,7 +374,7 @@ nonisolated struct SessionGenerator: Sendable {
                         ],
                         "opener": [
                             "type": "string",
-                            "description": "One short sentence, said at the bell right after 'Round two. Hooks.' — so never repeat the number or the focus back. One idea, under ten words, small enough to still be in their head at minute three: 'Turn the hip, don't arm it.' Not two ideas joined by a semicolon. Never a claim about what the fighter is doing — there is no camera, and this round hasn't happened.",
+                            "description": "One short sentence, said at the bell right after 'Round two. Hooks.' — so never repeat the number or the focus back. One idea, under ten words, small enough to still be in their head at minute three: 'Through the bag, not at it.' Aim it at something outside the body — the bag, the floor, the distance — rather than at a joint or a muscle; that phrasing measurably outperforms 'turn the hip'. Say what to do rather than what to avoid. Not two ideas joined by a semicolon. Never a claim about what the fighter is doing — there is no camera, and this round hasn't happened.",
                         ],
                     ],
                 ],
