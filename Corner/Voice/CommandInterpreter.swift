@@ -116,7 +116,12 @@ nonisolated struct CommandInterpreter: IntentReader {
 
     // MARK: - Schema
 
-    private static let schema: [String: Any] = [
+    // Computed rather than stored, because `[String: Any]` isn't `Sendable` —
+    // `Any` could be anything, so a shared `static let` is something Swift 6
+    // can't prove is safe to read from two threads. Building it fresh at each
+    // call site means there's nothing shared to reason about. It's built once
+    // per API call, which is nothing next to the request it's attached to.
+    private static var schema: [String: Any] { [
         "type": "object",
         "additionalProperties": false,
         "required": ["command"],
@@ -131,7 +136,7 @@ nonisolated struct CommandInterpreter: IntentReader {
                 "description": "The instruction this was, or none if it wasn't one.",
             ],
         ],
-    ]
+    ] }
 
     private struct Reading: Decodable {
         /// Its own type rather than `VoiceCommand` because it has a case

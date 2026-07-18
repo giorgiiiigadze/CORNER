@@ -1,4 +1,11 @@
-import ActivityKit
+// `@preconcurrency` because ActivityKit hasn't been audited for `Sendable`:
+// `Activity` is a plain class, and `update`/`end` are nonisolated `async`, so
+// calling them from this `@MainActor` class reads as sending a non-Sendable
+// value across isolation. ActivityKit is documented as callable from any
+// thread, so the risk Swift 6 is flagging isn't real here — this downgrades it
+// to a warning for this one import rather than asserting `@unchecked Sendable`
+// over Apple's type ourselves.
+@preconcurrency import ActivityKit
 import Foundation
 
 /// The session's presence on the Lock Screen and in the Dynamic Island.

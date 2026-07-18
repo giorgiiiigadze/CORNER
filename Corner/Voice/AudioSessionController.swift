@@ -59,14 +59,19 @@ final class AudioSessionController {
                   let type = AVAudioSession.InterruptionType(rawValue: raw)
             else { return }
 
+            // Read off the notification here, not inside the closure below.
+            // `Notification` isn't `Sendable`, so it can't cross into a
+            // main-actor context — but the option set lifted out of it is a
+            // `UInt` in a wrapper, and can. Same reason `type` is read up here.
+            let options = (note.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt)
+                .map(AVAudioSession.InterruptionOptions.init(rawValue:)) ?? []
+
             MainActor.assumeIsolated {
                 switch type {
                 case .began:
                     self.log.info("Audio interrupted")
                     self.onInterruptionBegan?()
                 case .ended:
-                    let options = (note.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt)
-                        .map(AVAudioSession.InterruptionOptions.init(rawValue:)) ?? []
                     if options.contains(.shouldResume) {
                         try? AVAudioSession.sharedInstance().setActive(true)
                         self.onInterruptionEnded?()

@@ -348,7 +348,11 @@ nonisolated struct SessionGenerator: Sendable {
     /// list. Note what's *absent*: ids and round numbers. Those are the app's
     /// business, not the model's — there's no reason to let it get numbering
     /// wrong when a loop index is exact.
-    private static let schema: [String: Any] = [
+    // Computed rather than stored, for the same reason as the one in
+    // `CommandInterpreter`: `[String: Any]` isn't `Sendable`, so a shared
+    // `static let` is state Swift 6 can't prove is safe to read concurrently.
+    // Nothing is shared if it's built fresh each time.
+    private static var schema: [String: Any] { [
         "type": "object",
         "additionalProperties": false,
         "required": ["title", "intro", "rounds"],
@@ -380,7 +384,7 @@ nonisolated struct SessionGenerator: Sendable {
                 ],
             ],
         ],
-    ]
+    ] }
 }
 
 private extension String {

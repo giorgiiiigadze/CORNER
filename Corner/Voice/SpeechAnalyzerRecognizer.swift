@@ -283,7 +283,13 @@ actor SpeechAnalyzerRecognizer: VoiceRecognizer {
         }
 
         var error: NSError?
-        var supplied = false
+        // `nonisolated(unsafe)` because the compiler types the input block as
+        // concurrently-executing, so a plain captured `var` reads as a data
+        // race. It isn't one: `convert` calls this block synchronously, on this
+        // thread, and returns before it does anything else — the flag never
+        // outlives the call below. This is the rare case where the assertion is
+        // the honest answer rather than a way to shut the compiler up.
+        nonisolated(unsafe) var supplied = false
         converter.convert(to: output, error: &error) { _, status in
             if supplied {
                 status.pointee = .noDataNow
