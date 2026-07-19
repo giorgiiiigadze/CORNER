@@ -357,7 +357,7 @@ struct ContentView: View {
             // Placeholder mark. A rounded square at icon proportions so the real
             // artwork can drop straight in without the row reflowing around it.
             RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .fill(Theme.Palette.accent)
+                .fill(Theme.Palette.accentLight)
                 .frame(width: 34, height: 34)
                 .overlay {
                     Image(systemName: "figure.boxing")
@@ -399,7 +399,7 @@ struct ContentView: View {
                 // The flame carries the accent whether or not the streak is
                 // alive: a grey flame next to a zero reads as a broken feature
                 // rather than as a streak waiting to start.
-                .foregroundStyle(Theme.Palette.accent)
+                .foregroundStyle(Theme.Palette.accentLight)
                 .font(.system(size: 14, weight: .bold))
 
             Text("\(streak)")

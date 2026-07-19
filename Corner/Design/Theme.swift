@@ -31,6 +31,18 @@ enum Theme {
         /// The one accent. Shared with the timer — it's the brand. #CC0404.
         static let accent = Color(red: 0.8, green: 0.016, blue: 0.016)
 
+        /// The same red, lifted. #FF3333.
+        ///
+        /// For the small marks: the identity square, the streak flame, the ring
+        /// on a day that was trained. `accent` is mixed for large fills against
+        /// white — on a black screen, at the size of a 2pt ring or a 14pt glyph,
+        /// it goes muddy and stops reading as red at all. This is the same hue
+        /// with the brightness a small mark needs to survive.
+        ///
+        /// Two values rather than one everywhere, because the failure runs both
+        /// ways: this one on a full-width button would glare.
+        static let accentLight = Color(red: 1.0, green: 0.2, blue: 0.2)
+
         static let primaryText = Color(.label)
         static let secondaryText = Color(.secondaryLabel)
 
