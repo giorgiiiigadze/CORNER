@@ -28,6 +28,21 @@ struct SessionSync {
     let auth: AuthController
     let context: ModelContext
 
+    /// Where the last outcome is left for Settings to read.
+    ///
+    /// `UserDefaults` rather than state on a view: sync runs from three places
+    /// and outlives all of them, and a result nobody can see is how a broken
+    /// backup stays broken quietly for weeks.
+    enum Report {
+        static let resultKey = "sync.lastResult"
+        static let dateKey = "sync.lastAt"
+
+        static func write(_ text: String) {
+            UserDefaults.standard.set(text, forKey: resultKey)
+            UserDefaults.standard.set(Date.now, forKey: dateKey)
+        }
+    }
+
     private var log: Logger { Logger(subsystem: "Giorgi.Corner", category: "sync") }
 
     private var endpoint: URL {
@@ -65,10 +80,18 @@ struct SessionSync {
 
             guard let token = await auth.token() else {
                 log.error("Sync skipped: no access token")
+                Report.write("Not signed in")
                 return
             }
-            guard let userID = auth.userID else {
+
+            // Falls back to the token's own `sub` claim. `auth.userID` is read
+            // off whichever response last carried a user, and a path that
+            // somehow doesn't carry one would strand every session on the phone
+            // — the id is right there in the token we're about to send, so
+            // there's no good reason to give up for want of it.
+            guard let userID = auth.userID ?? Self.subject(of: token) else {
                 log.error("Sync skipped: no user id")
+                Report.write("No account id")
                 return
             }
 
@@ -141,6 +164,7 @@ struct SessionSync {
             // records exist under a different user id than the one signing in,
             // which is a fault worth seeing rather than reading as "all synced".
             log.info("Nothing to push — \(mine.count) session(s) owned, all synced")
+            Report.write(mine.isEmpty ? "No sessions on this device" : "All \(mine.count) synced")
             return
         }
 
@@ -161,7 +185,9 @@ struct SessionSync {
             let status = (response as? HTTPURLResponse)?.statusCode ?? -1
 
             guard (200..<300).contains(status) else {
-                log.error("Push failed (\(status)): \(String(data: data.prefix(200), encoding: .utf8) ?? "", privacy: .public)")
+                let detail = String(data: data.prefix(160), encoding: .utf8) ?? ""
+                log.error("Push failed (\(status)): \(detail, privacy: .public)")
+                Report.write("Upload failed (\(status)) \(detail)")
                 return
             }
 
@@ -170,12 +196,34 @@ struct SessionSync {
             for record in pending { record.isSynced = true }
             try? context.save()
             log.info("Pushed \(pending.count) sessions")
+            Report.write("Uploaded \(pending.count) session(s)")
         } catch {
             log.error("Push failed: \(error.localizedDescription, privacy: .public)")
+            Report.write("Upload failed: \(error.localizedDescription)")
         }
     }
 
     // MARK: - Local
+
+    /// The user id carried inside an access token.
+    ///
+    /// Unverified, and that's fine: the server verifies it. This is only used to
+    /// address our own rows, and a wrong guess is refused by row-level security
+    /// rather than trusted.
+    private static func subject(of token: String) -> String? {
+        let parts = token.split(separator: ".")
+        guard parts.count == 3 else { return nil }
+
+        var payload = String(parts[1]).replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        while payload.count % 4 != 0 { payload += "=" }
+
+        guard let data = Data(base64Encoded: payload),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return nil }
+
+        return json["sub"] as? String
+    }
 
     /// This user's records — what gets uploaded.
     private func localRecords() -> [TrainingRecord] {

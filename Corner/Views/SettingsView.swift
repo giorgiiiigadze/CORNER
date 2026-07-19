@@ -13,6 +13,10 @@ import SwiftUI
 struct SettingsView: View {
 
     @Environment(AuthController.self) private var auth
+    @Environment(\.modelContext) private var modelContext
+
+    @AppStorage(SessionSync.Report.resultKey) private var lastSync: String = "Not yet"
+    @State private var isSyncing = false
 
     @AppStorage(ElevenLabsVoice.preferenceKey) private var cornermanVoiceID: String = ElevenLabsCatalog.defaultVoiceID
 
@@ -38,9 +42,46 @@ struct SettingsView: View {
         }
     }
 
+    /// Whether the sessions on this phone have reached the account.
+    ///
+    /// On screen rather than in a log, because this is the one thing on the
+    /// device the user can't otherwise find out and can't afford to be wrong
+    /// about: a backup that quietly isn't happening looks exactly like one that
+    /// is, right up until the phone is replaced.
+    private var backup: some View {
+        Section {
+            LabeledContent("Last backup", value: lastSync)
+                .font(.subheadline)
+
+            Button {
+                isSyncing = true
+                Task {
+                    await SessionSync(auth: auth, context: modelContext).run()
+                    isSyncing = false
+                }
+            } label: {
+                HStack {
+                    Text("Back up now")
+                    if isSyncing {
+                        Spacer()
+                        ProgressView()
+                    }
+                }
+            }
+            .font(.subheadline)
+            .disabled(isSyncing)
+        } header: {
+            Text("Training backup")
+        } footer: {
+            Text("Finished sessions are kept on this phone and copied to your account, so they follow you to a new device.")
+        }
+    }
+
     var body: some View {
         List {
             account
+
+            backup
 
             Section {
                 cornermanVoices
