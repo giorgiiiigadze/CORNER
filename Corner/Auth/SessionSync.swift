@@ -41,29 +41,50 @@ struct SessionSync {
     /// nothing to send for those. The other way round, a device that had
     /// claimed legacy records would re-upload rows it was about to receive.
     func run() async {
-        // One at a time. Startup and "session just finished" both call this, and
-        // they overlap: a workout that ends while the launch sync is still in
-        // flight had both passes reading `!isSynced` before either wrote it, so
-        // the same record went up twice and two saves raced on the same objects.
-        // The upsert made the server side harmless; the local double-write was
-        // the part worth closing.
-        guard !Self.isRunning else { return }
+        // One at a time, but never *instead of*. Startup and "session just
+        // finished" both call this and they overlap — and the first version
+        // simply returned when a run was already going, which threw the second
+        // call away. That's how a session trained during the launch sync sat
+        // unsent until the next cold start: the only call that would have
+        // uploaded it was the one that got dropped.
+        //
+        // Now an overlapping call asks for another pass instead, and the run in
+        // flight does it before finishing. Still one at a time, still no double
+        // write, and nothing is lost.
+        guard !Self.isRunning else {
+            Self.wantsAnotherPass = true
+            log.info("Sync already running — queued another pass")
+            return
+        }
+
         Self.isRunning = true
         defer { Self.isRunning = false }
 
-        guard let token = await auth.token(), let userID = auth.userID else { return }
+        repeat {
+            Self.wantsAnotherPass = false
 
-        await pull(token: token, userID: userID)
-        await push(token: token, userID: userID)
+            guard let token = await auth.token() else {
+                log.error("Sync skipped: no access token")
+                return
+            }
+            guard let userID = auth.userID else {
+                log.error("Sync skipped: no user id")
+                return
+            }
+
+            await pull(token: token, userID: userID)
+            await push(token: token, userID: userID)
+        } while Self.wantsAnotherPass
     }
 
     /// Static because `SessionSync` is a struct built fresh at each call site —
     /// an instance flag would guard nothing.
     ///
     /// Safe as shared mutable state only because the type is `@MainActor`: every
-    /// read and write of this happens on the main actor, and the `await`s above
-    /// suspend rather than hand it to another thread.
+    /// read and write happens on the main actor, and the `await`s above suspend
+    /// rather than hand it to another thread.
     @MainActor private static var isRunning = false
+    @MainActor private static var wantsAnotherPass = false
 
     // MARK: - Down
 
@@ -110,8 +131,18 @@ struct SessionSync {
     // MARK: - Up
 
     private func push(token: String, userID: String) async {
-        let pending = localRecords().filter { !$0.isSynced }
-        guard !pending.isEmpty else { return }
+        let mine = localRecords()
+        let pending = mine.filter { !$0.isSynced }
+
+        guard !pending.isEmpty else {
+            // Said out loud, because "nothing to send" and "never ran" look
+            // identical in a log that stays quiet — and they point at completely
+            // different bugs. The owned count comes too: zero there means the
+            // records exist under a different user id than the one signing in,
+            // which is a fault worth seeing rather than reading as "all synced".
+            log.info("Nothing to push — \(mine.count) session(s) owned, all synced")
+            return
+        }
 
         let rows = pending.map { Row(record: $0, userID: userID) }
 
