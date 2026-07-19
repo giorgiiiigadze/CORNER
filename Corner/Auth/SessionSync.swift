@@ -78,6 +78,8 @@ struct SessionSync {
         repeat {
             Self.wantsAnotherPass = false
 
+            repairDuplicateIDs()
+
             guard let token = await auth.token() else {
                 log.error("Sync skipped: no access token")
                 Report.write("Not signed in")
@@ -168,7 +170,14 @@ struct SessionSync {
             return
         }
 
-        let rows = pending.map { Row(record: $0, userID: userID) }
+        // Deduplicated by id even after the repair above. A batch that carries
+        // one id twice doesn't fail partially — Postgres rejects the whole
+        // command, so every well-formed row in it is lost too. Cheap insurance
+        // against a class of bug that costs everything when it happens.
+        var seen = Set<UUID>()
+        let rows = pending
+            .filter { seen.insert($0.remoteID).inserted }
+            .map { Row(record: $0, userID: userID) }
 
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
@@ -204,6 +213,45 @@ struct SessionSync {
     }
 
     // MARK: - Local
+
+    /// Gives every session its own id again.
+    ///
+    /// `remoteID` was added to a model that already had rows in it, and
+    /// SwiftData's lightweight migration takes `= UUID()` as a *schema* default
+    /// — evaluated once, then written to every existing row. So every session
+    /// trained before that change came out carrying the same id.
+    ///
+    /// Two rows with one id in a single upsert is a cardinality violation:
+    /// Postgres refuses with `21000 ON CONFLICT DO UPDATE command cannot affect
+    /// row a second time`, and the whole batch 500s — which is what kept the
+    /// table empty even after the null-encoding fix.
+    ///
+    /// Only unsynced records are re-issued. A record the server already has is
+    /// known there by this id, and changing it would orphan that row and upload
+    /// a second copy of the same session.
+    private func repairDuplicateIDs() {
+        let all = (try? context.fetch(FetchDescriptor<TrainingRecord>())) ?? []
+
+        var seen = Set<UUID>()
+        var repaired = 0
+
+        for record in all {
+            if seen.insert(record.remoteID).inserted { continue }
+
+            guard !record.isSynced else {
+                log.error("Duplicate id on an already-synced session — left alone")
+                continue
+            }
+
+            record.remoteID = UUID()
+            repaired += 1
+        }
+
+        if repaired > 0 {
+            try? context.save()
+            log.info("Re-issued \(repaired) duplicate session id(s)")
+        }
+    }
 
     /// The user id carried inside an access token.
     ///
