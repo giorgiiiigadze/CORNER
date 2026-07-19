@@ -273,6 +273,32 @@ struct SessionSync {
             pause_count = record.pauseCount
         }
 
+        /// Written by hand so every row carries every key, `null` included.
+        ///
+        /// Swift's synthesised `encode` uses `encodeIfPresent` for optionals,
+        /// which *omits* a nil rather than writing null — and PostgREST rejects
+        /// a bulk insert whose objects don't all have the same keys, with
+        /// `PGRST102 "All object keys must match"`. One session recorded before
+        /// the app timed durations, sitting in the same batch as one recorded
+        /// after, was enough to 400 the whole upload — including the rows that
+        /// were perfectly fine. That's the bug that kept the table empty.
+        func encode(to encoder: any Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(id, forKey: .id)
+            try container.encode(user_id, forKey: .user_id)
+            try container.encode(performed_at, forKey: .performed_at)
+            try container.encode(title, forKey: .title)
+            try container.encode(focuses, forKey: .focuses)
+            try container.encode(rounds_planned, forKey: .rounds_planned)
+            try container.encode(rounds_completed, forKey: .rounds_completed)
+            try container.encode(ended_early, forKey: .ended_early)
+            // `encode`, not `encodeIfPresent`: nil has to reach the server as an
+            // explicit null. A missing duration is a fact — the session predates
+            // the app timing it — and it has to survive the trip as one.
+            try container.encode(session_seconds, forKey: .session_seconds)
+            try container.encode(pause_count, forKey: .pause_count)
+        }
+
         /// Arrives already synced, by definition — it came from the server.
         func record(userID: String) -> TrainingRecord {
             let record = TrainingRecord(
