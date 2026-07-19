@@ -36,7 +36,7 @@ struct WeekStrip: View {
     /// Fixed rather than divided by seven: the strip scrolls now, so a slot has
     /// to be one width everywhere instead of a fraction of a screen that only
     /// happens to fit the current week.
-    private static let slot: CGFloat = 46
+    static let slot: CGFloat = 46
 
     private let calendar = Calendar.current
 

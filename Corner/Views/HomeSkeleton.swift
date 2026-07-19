@@ -57,9 +57,20 @@ struct HomeSkeleton: View {
 
     // MARK: - Pieces
 
+    /// The calendar's cells, at the calendar's own metrics.
+    ///
+    /// Eight of them at a fixed `WeekStrip.slot`, not seven spread across the
+    /// width. The real strip scrolls and parks on today, so eight columns are on
+    /// screen with the first one clipped — seven even thirds put every circle in
+    /// the wrong place and the difference showed the instant the real one
+    /// arrived.
+    ///
+    /// The width is read off `WeekStrip` rather than copied. A placeholder whose
+    /// job is to be the same shape as something else shouldn't hold its own
+    /// opinion about that shape.
     private var week: some View {
         HStack(spacing: 0) {
-            ForEach(0..<7, id: \.self) { _ in
+            ForEach(0..<8, id: \.self) { _ in
                 VStack(spacing: 6) {
                     // 13, matching a `caption2` line box rather than the 10 that
                     // looked about right — the strip is short by three points a
@@ -74,9 +85,13 @@ struct HomeSkeleton: View {
                 // and the whole dashboard below sits high, which is what made
                 // the swap jump.
                 .padding(.vertical, 11)
-                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 4)
+                .frame(width: WeekStrip.slot)
             }
         }
+        // Anchored right, like the strip it stands in for: that one opens
+        // scrolled to today, so it's the leading edge that runs off screen.
+        .frame(maxWidth: .infinity, alignment: .trailing)
     }
 
     private var hero: some View {
