@@ -13,13 +13,6 @@ nonisolated struct TrainingStats: Equatable {
         let date: Date
         let minutes: Int
         let rounds: Int
-
-        /// Whether anything happened on this day.
-        ///
-        /// Rounds rather than minutes: sessions trained before the app timed
-        /// them carry rounds with no minutes attached, and those days were
-        /// still trained. Reading `minutes` alone would draw them as rest days.
-        var trained: Bool { rounds > 0 }
     }
 
     /// Last seven days, oldest first. Days you didn't train are in here as

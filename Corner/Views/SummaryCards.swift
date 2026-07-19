@@ -53,17 +53,8 @@ struct SummaryCards: View {
             LazyVGrid(columns: columns, spacing: Self.gap) {
                 rounds.aspectRatio(1, contentMode: .fit)
                 sessions.aspectRatio(1, contentMode: .fit)
-                streak.aspectRatio(1, contentMode: .fit)
-                drilling.aspectRatio(1, contentMode: .fit)
             }
 
-            // The asterisk on every minute figure above.
-            if stats.sessionsWithoutMinutes > 0 {
-                Text("\(stats.sessionsWithoutMinutes) earlier \(stats.sessionsWithoutMinutes == 1 ? "session isn't" : "sessions aren't") counted in minutes — they were trained before the app timed them.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
         }
     }
 
@@ -78,7 +69,12 @@ struct SummaryCards: View {
         //
         // "Worked", not "on the bag": it counts the rests too, and a minute spent
         // breathing between rounds is not a minute on the bag.
-        Card(title: "Minutes worked", caption: "All time", showsChevron: false) {
+        Card(
+            title: "Minutes worked",
+            caption: "All time",
+            titleFont: .title3.weight(.semibold),
+            showsChevron: false
+        ) {
             Text("\(stats.minutesTotal)")
                 .font(.system(size: 44, weight: .heavy, design: .rounded))
                 .foregroundStyle(.primary)
@@ -158,43 +154,6 @@ struct SummaryCards: View {
         }
     }
 
-    /// The streak, over the week that produced it.
-    ///
-    /// A bare streak number is the least legible card on the screen: "3" tells
-    /// you nothing about whether you're mid-run or about to break one. The dots
-    /// are the same seven days the other cards are counting, so a glance says
-    /// which days you trained and — because today is always the last dot —
-    /// whether today is still open.
-    private var streak: some View {
-        Card(title: "Streak", caption: stats.streak == 1 ? "day" : "days") {
-            Big("\(stats.streak)")
-            Spacer(minLength: 8)
-            WeekDots(week: stats.week)
-        }
-    }
-
-    /// The one card that isn't a number, because the answer isn't one.
-    private var drilling: some View {
-        Card(title: "Drilling", caption: "Lately") {
-            if stats.recentFocuses.isEmpty {
-                Text("—")
-                    .font(.system(size: 28, weight: .heavy, design: .rounded))
-                    .foregroundStyle(.secondary)
-            } else {
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(stats.recentFocuses.prefix(3), id: \.self) { focus in
-                        Text(focus)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
-                    }
-                }
-            }
-            Spacer(minLength: 0)
-        }
-    }
-
     // MARK: - Derived
 
     private var lastTrainedText: String {
@@ -214,6 +173,11 @@ struct SummaryCards: View {
 private struct Card<Content: View>: View {
     let title: String
     let caption: String
+    /// The hero sits at twice the tile's width, so it carries a heavier title —
+    /// the tiles' `.subheadline` looked like a caption at that size. A parameter
+    /// rather than a second `Card`, so the padding, corner and fill stay in one
+    /// place and can't drift between the two.
+    var titleFont: Font = .subheadline.weight(.semibold)
     /// Off for the hero, on for the tiles — the shape Fitness uses, where the
     /// Activity Ring carries no chevron and the four tiles below it all do.
     var showsChevron: Bool = true
@@ -223,7 +187,7 @@ private struct Card<Content: View>: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(title)
-                    .font(.subheadline.weight(.semibold))
+                    .font(titleFont)
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                     // The title yields before the chevron does: on a narrow tile
@@ -286,31 +250,6 @@ private struct Footnote: View {
             .foregroundStyle(.secondary)
             .lineLimit(1)
             .minimumScaleFactor(0.8)
-    }
-}
-
-/// Seven days as seven marks: filled where work was done, hollow where it
-/// wasn't, and the accent on today.
-///
-/// Capsules rather than circles because they read at this size — a 6pt circle
-/// is a speck on a tile, and the eye needs to count seven of them at a glance
-/// without stopping to look.
-private struct WeekDots: View {
-    let week: [TrainingStats.Day]
-
-    var body: some View {
-        HStack(spacing: 2) {
-            ForEach(week) { day in
-                Image(systemName: day.trained ? "checkmark" : "minus")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(day.trained ? Theme.Live.workOnDark : Color(.quaternaryLabel))
-                    .frame(maxWidth: .infinity)
-            }
-        }
-        // Reads as one thing, not seven — VoiceOver spelling out seven icons is
-        // noise, and the streak number above already says the total.
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(week.filter(\.trained).count) of the last 7 days trained")
     }
 }
 

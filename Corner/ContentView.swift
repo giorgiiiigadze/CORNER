@@ -71,7 +71,12 @@ struct ContentView: View {
             Tab(value: Page.create, role: .search) {
                 Color.clear
             } label: {
+                // White, against the accent the other four carry. The bar's
+                // tint is the brand red; this one control is the app's primary
+                // action and reads as a separate object, so it takes its own
+                // ink. On the label rather than the `Tab` — `Tab` isn't a view.
                 Label("New session", systemImage: "plus")
+                    .tint(.white)
             }
         }
         .onChange(of: page) { previous, current in
@@ -172,7 +177,7 @@ struct ContentView: View {
     /// than as continuing. The header keeps its margin, the strip runs full
     /// width, and the negative inset undoes the padding they'd otherwise share.
     private var masthead: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 26) {
             header
 
             WeekStrip(trained: Set(history.map(\.date)))
@@ -232,7 +237,10 @@ struct ContentView: View {
             // train, not the way — a screen that leads with last week's numbers
             // asks you to read before it lets you work.
             Section {
-                SummaryCards(stats: TrainingStats.from(history: history))
+                VStack(spacing: 20) {
+                    SummaryCards(stats: TrainingStats.from(history: history))
+                    RecentSessions(history: history)
+                }
                     // Zero, not 16. The list style already insets the section,
                     // and any row inset is charged on top of that — the cards
                     // were paying the margin twice and coming out narrow.
@@ -244,6 +252,10 @@ struct ContentView: View {
 
         }
         .scrollContentBackground(.hidden)
+        // The calendar inside the masthead already hides its own indicator; this
+        // is the page's. A bar tracking down the edge of a screen this short is
+        // chrome that reports something the content already makes obvious.
+        .scrollIndicators(.hidden)
         // 8, the same gap the dashboard tiles use between each other. The row
         // insets above only control padding *inside* a section — the space
         // between two sections is this, and left at its default it was reading
