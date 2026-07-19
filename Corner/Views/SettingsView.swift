@@ -39,6 +39,7 @@ struct SettingsView: View {
                         .tint(Theme.Palette.accentLight)
                 }
             }
+            .listRowBackground(Color(.tertiarySystemGroupedBackground))
 
             Section {
                 NavigationLink {
@@ -61,8 +62,20 @@ struct SettingsView: View {
                     )
                 }
             }
+            .listRowBackground(Color(.tertiarySystemGroupedBackground))
         }
         .scrollContentBackground(.hidden)
+        // Grey, not the black the rest of the chrome uses.
+        //
+        // Home is black because its cards are the content — the dashboard is
+        // what you came for and the ground behind it should disappear. A
+        // settings screen is the opposite: the rows *are* the screen, and a grey
+        // ground is what makes a stack of them read as one list rather than as
+        // cards floating in a void.
+        //
+        // The rows lift a step to `tertiary` so they keep the same separation
+        // from their background that they had on black.
+        .background(Color(.secondarySystemGroupedBackground))
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -93,8 +106,10 @@ struct VoicePicker: View {
             } footer: {
                 Text("Tap to hear it. The voice is the app — pick one you'd take instructions from.")
             }
+            .listRowBackground(Color(.tertiarySystemGroupedBackground))
         }
         .scrollContentBackground(.hidden)
+        .background(Color(.secondarySystemGroupedBackground))
         .navigationTitle("Cornerman voice")
         .navigationBarTitleDisplayMode(.inline)
         .task { await loadCornermanVoices() }
@@ -183,8 +198,10 @@ struct CommandsList: View {
             } footer: {
                 Text("Say them at any point in a session. He answers even with the coaching turned off.")
             }
+            .listRowBackground(Color(.tertiarySystemGroupedBackground))
         }
         .scrollContentBackground(.hidden)
+        .background(Color(.secondarySystemGroupedBackground))
         .navigationTitle("Voice commands")
         .navigationBarTitleDisplayMode(.inline)
     }
