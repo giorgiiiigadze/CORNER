@@ -161,12 +161,15 @@ struct ProfilePage: View {
             NavigationLink {
                 SettingsView()
             } label: {
-                Text("Settings")
+                Image(systemName: "gearshape.fill")
                     // Padding widens the capsule; the bar still owns the height
                     // and the material. A frame here is what made the first
                     // toolbar attempt look like nothing else on the phone.
                     .padding(.horizontal, 8)
             }
+            // The word is gone, so the label has to live here — a bare glyph
+            // announces itself as "gearshape" to VoiceOver otherwise.
+            .accessibilityLabel("Settings")
         }
     }
 }
