@@ -24,20 +24,37 @@ struct SummaryCards: View {
 
     let stats: TrainingStats
 
+    /// 8, not 12 — the tiles read as one block this way rather than as cards
+    /// drifting apart. The column spacing and the two stack spacings below are
+    /// the same number on purpose: the gap between two tiles side by side and
+    /// the gap between two rows have to match, or the grid looks skewed.
+    static let gap: CGFloat = 8
+
     private let columns = [
-        GridItem(.flexible(), spacing: 12),
-        GridItem(.flexible(), spacing: 12),
+        GridItem(.flexible(), spacing: Self.gap),
+        GridItem(.flexible(), spacing: Self.gap),
     ]
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: Self.gap) {
             hero
 
-            LazyVGrid(columns: columns, spacing: 12) {
-                rounds
-                sessions
-                streak
-                drilling
+            // Square, all four, which is the whole point of a grid — Fitness's
+            // small tiles are one size and the eye reads them as a set rather
+            // than as four things that happen to be near each other. Left to
+            // themselves the rows disagree: `rounds` carries a sparkline and the
+            // Streak/Drilling row underneath doesn't, so the grid came out with
+            // a tall row above a short one.
+            //
+            // An aspect ratio rather than a fixed height: the tile is half the
+            // gutter-width whatever the device is, so it stays square on an SE
+            // and on a Pro Max, and it grows with Dynamic Type instead of
+            // clipping at a number picked on one simulator.
+            LazyVGrid(columns: columns, spacing: Self.gap) {
+                rounds.aspectRatio(1, contentMode: .fit)
+                sessions.aspectRatio(1, contentMode: .fit)
+                streak.aspectRatio(1, contentMode: .fit)
+                drilling.aspectRatio(1, contentMode: .fit)
             }
 
             // The asterisk on every minute figure above.
@@ -61,7 +78,7 @@ struct SummaryCards: View {
         //
         // "Worked", not "on the bag": it counts the rests too, and a minute spent
         // breathing between rounds is not a minute on the bag.
-        Card(title: "Minutes worked", caption: "All time") {
+        Card(title: "Minutes worked", caption: "All time", showsChevron: false) {
             Text("\(stats.minutesTotal)")
                 .font(.system(size: 44, weight: .heavy, design: .rounded))
                 .foregroundStyle(.primary)
@@ -78,9 +95,9 @@ struct SummaryCards: View {
             .chartYAxis(.hidden)
             .chartXAxis {
                 AxisMarks(values: .stride(by: .day)) { value in
-                    AxisValueLabel(format: .dateTime.weekday(.narrow))
+                    AxisValueLabel(format: .dateTime.weekday(.narrow), centered: true)
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color(.secondaryLabel))
                 }
             }
             .frame(height: 68)
@@ -91,6 +108,15 @@ struct SummaryCards: View {
         Card(title: "Rounds", caption: "This week") {
             Big("\(stats.roundsThisWeek)")
 
+            // The sparkline sits on the floor of the tile, not directly under
+            // the number. This is the Fitness construction and the reason it
+            // works: number at the top, chart on the baseline, the gap between
+            // them absorbing whatever height is left over. Floating the chart up
+            // against the number left a band of dead space under it that made
+            // the tile look unfinished — and made the four tiles disagree, since
+            // only this one and the hero have a chart to float.
+            Spacer(minLength: 8)
+
             Chart(stats.week) { day in
                 BarMark(
                     x: .value("Day", day.date, unit: .day),
@@ -100,22 +126,50 @@ struct SummaryCards: View {
                 .cornerRadius(2)
             }
             .chartYAxis(.hidden)
-            .chartXAxis(.hidden)
-            .frame(height: 34)
+            // Narrow weekday initials, the same axis the hero carries. On a tile
+            // this size they're the difference between a decorative squiggle and
+            // a chart you can actually read a day off.
+            .chartXAxis {
+                AxisMarks(values: .stride(by: .day)) { _ in
+                    AxisValueLabel(format: .dateTime.weekday(.narrow), centered: true)
+                        .font(.system(size: 9))
+                        .foregroundStyle(Color(.secondaryLabel))
+                }
+            }
+            // Flexible rather than fixed: the tile is square and its height
+            // follows the device width, so a hardcoded 34pt was a different
+            // proportion of the card on every phone.
+            .frame(maxHeight: .infinity)
         }
     }
 
+    /// The running total, with this week's count on the baseline. The total is
+    /// what you've built and the week is whether you're still building it — the
+    /// same two-part answer the hero gives, at tile scale.
     private var sessions: some View {
         Card(title: "Sessions", caption: lastTrainedText) {
             Big("\(stats.totalSessions)")
-            Spacer(minLength: 0)
+            Spacer(minLength: 8)
+            Footnote(
+                stats.sessionsThisWeek == 0
+                    ? "None this week"
+                    : "\(stats.sessionsThisWeek) this week"
+            )
         }
     }
 
+    /// The streak, over the week that produced it.
+    ///
+    /// A bare streak number is the least legible card on the screen: "3" tells
+    /// you nothing about whether you're mid-run or about to break one. The dots
+    /// are the same seven days the other cards are counting, so a glance says
+    /// which days you trained and — because today is always the last dot —
+    /// whether today is still open.
     private var streak: some View {
         Card(title: "Streak", caption: stats.streak == 1 ? "day" : "days") {
             Big("\(stats.streak)")
-            Spacer(minLength: 0)
+            Spacer(minLength: 8)
+            WeekDots(week: stats.week)
         }
     }
 
@@ -160,22 +214,103 @@ struct SummaryCards: View {
 private struct Card<Content: View>: View {
     let title: String
     let caption: String
+    /// Off for the hero, on for the tiles — the shape Fitness uses, where the
+    /// Activity Ring carries no chevron and the four tiles below it all do.
+    var showsChevron: Bool = true
     @ViewBuilder let content: Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.primary)
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    // The title yields before the chevron does: on a narrow tile
+                    // a long word should shrink rather than shove the disclosure
+                    // off the edge.
+                    .minimumScaleFactor(0.85)
+
+                if showsChevron {
+                    Spacer(minLength: 0)
+                    Chevron()
+                }
+            }
+
             Text(caption)
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
             content
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        // Fills its slot in both directions, and pins the content to the top.
+        // Height matters as much as width once the tiles are square: without
+        // `maxHeight` the background hugged the content while the square frame
+        // around it stayed full size, so each card floated at its own offset and
+        // the row came out visibly ragged — Rounds sitting lower than Sessions
+        // because it has a sparkline to be taller than.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(14)
         .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 18))
+    }
+}
+
+/// The disclosure affordance in the corner of a tile: a chevron on a filled
+/// disc, sized off the caption so it tracks Dynamic Type instead of staying a
+/// fixed dot while the text around it grows.
+private struct Chevron: View {
+    var body: some View {
+        Image(systemName: "chevron.right")
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(.secondary)
+            .padding(5)
+            .background(Color(.tertiarySystemFill), in: .circle)
+            // Decoration, not a control — the card itself is what a fighter
+            // would tap once these lead anywhere, so this must not become a
+            // second VoiceOver stop announcing "button" on top of it.
+            .accessibilityHidden(true)
+    }
+}
+
+/// The quiet line on a tile's baseline. Sits where the sparkline sits on the
+/// cards that have one, so all four tiles share a floor rather than each ending
+/// wherever its content ran out.
+private struct Footnote: View {
+    let text: String
+
+    init(_ text: String) { self.text = text }
+
+    var body: some View {
+        Text(text)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+    }
+}
+
+/// Seven days as seven marks: filled where work was done, hollow where it
+/// wasn't, and the accent on today.
+///
+/// Capsules rather than circles because they read at this size — a 6pt circle
+/// is a speck on a tile, and the eye needs to count seven of them at a glance
+/// without stopping to look.
+private struct WeekDots: View {
+    let week: [TrainingStats.Day]
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(week) { day in
+                Image(systemName: day.trained ? "checkmark" : "minus")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(day.trained ? Theme.Live.workOnDark : Color(.quaternaryLabel))
+                    .frame(maxWidth: .infinity)
+            }
+        }
+        // Reads as one thing, not seven — VoiceOver spelling out seven icons is
+        // noise, and the streak number above already says the total.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(week.filter(\.trained).count) of the last 7 days trained")
     }
 }
 
@@ -187,7 +322,7 @@ private struct Big: View {
 
     var body: some View {
         Text(value)
-            .font(.system(size: 32, weight: .heavy, design: .rounded))
+            .font(.system(size: 32, weight: .bold, design: .rounded))
             .foregroundStyle(.primary)
             .contentTransition(.numericText())
     }

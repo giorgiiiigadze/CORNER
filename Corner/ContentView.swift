@@ -57,6 +57,27 @@ struct ContentView: View {
             Tab(Page.settings.title, systemImage: Page.settings.icon, value: .settings) {
                 destination(.settings) { SettingsView() }
             }
+
+            // The detached button beside the bar, and it's a real tab role
+            // rather than anything drawn by hand: iOS 26 lifts a `.search` tab
+            // out of the bar and renders it as its own circle on the trailing
+            // edge. Cal AI spends that slot on compose instead of search, which
+            // is what this is.
+            //
+            // The content is never seen. Selecting this tab is an *action*, not
+            // a destination — `bounce(to:)` below opens the setup sheet and puts
+            // the selection straight back where it was, so the bar never shows a
+            // fifth page as current.
+            Tab(value: Page.create, role: .search) {
+                Color.clear
+            } label: {
+                Label("New session", systemImage: "plus")
+            }
+        }
+        .onChange(of: page) { previous, current in
+            guard current == .create else { return }
+            page = previous == .create ? .home : previous
+            showingSetup = true
         }
         // All four tabs, all the time. The iOS 26 minimize gesture collapses the
         // bar to the selected tab alone as you scroll, which reads as the other
@@ -65,7 +86,9 @@ struct ContentView: View {
         // height isn't worth it here.
         .tabBarMinimizeBehavior(.never)
         .tint(Theme.Palette.accent)
-        .preferredColorScheme(.light)
+        // The chrome is dark; the live timer pins itself back to light, because a
+        // pale screen across a gym is the one thing that screen is for.
+        .preferredColorScheme(.dark)
         .sheet(isPresented: $showingSetup) {
             SessionSetupSheet(request: $request) {
                 Task { await generate() }
@@ -95,37 +118,101 @@ struct ContentView: View {
     /// of what "native" means here: the title used to be the widest pill in our
     /// own bar, and now it's where iOS puts it — collapsing into the nav bar as
     /// you scroll, without us animating anything.
+    ///
+    /// Home is the exception. It carries a branded header of its own — mark and
+    /// wordmark on the left, streak on the right — and a large "Home" sitting
+    /// above that would be two titles stacked, naming the same screen twice.
     private func destination<Content: View>(
         _ page: Page,
         @ViewBuilder content: () -> Content
     ) -> some View {
         NavigationStack {
             content()
-                .navigationTitle(page.title)
+                .navigationTitle(page == .home ? "" : page.title)
+                .navigationBarTitleDisplayMode(page == .home ? .inline : .large)
                 .background(Theme.Palette.background)
         }
+    }
+
+    /// The masthead: who the app is, and the one number that says whether you're
+    /// keeping at it.
+    ///
+    /// The streak rather than any of the other four stats, and on the header
+    /// rather than only in the grid below, because it's the number that changes
+    /// how you feel about opening the app — the total minutes are a record, the
+    /// streak is a stake.
+    private var header: some View {
+        HStack(spacing: 10) {
+            // Placeholder mark. A rounded square at icon proportions so the real
+            // artwork can drop straight in without the row reflowing around it.
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .fill(Theme.Palette.accent)
+                .frame(width: 34, height: 34)
+                .overlay {
+                    Image(systemName: "figure.boxing")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+
+            Text("Corner")
+                .font(.title.weight(.bold))
+                .foregroundStyle(.primary)
+
+            Spacer(minLength: 8)
+
+            streakPill
+        }
+        .padding(.horizontal, 4)
+    }
+
+    /// The masthead and the calendar under it, as one block.
+    ///
+    /// The strip is deliberately not inset with the header: it scrolls, and a
+    /// scrolling row that stops short of the screen edge reads as clipped rather
+    /// than as continuing. The header keeps its margin, the strip runs full
+    /// width, and the negative inset undoes the padding they'd otherwise share.
+    private var masthead: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            header
+
+            WeekStrip(trained: Set(history.map(\.date)))
+                .padding(.horizontal, -16)
+        }
+        .padding(.top, 8)
+        .padding(.bottom, 10)
+    }
+
+    private var streakPill: some View {
+        let streak = TrainingStats.from(history: history).streak
+        return HStack(spacing: 5) {
+            Image(systemName: "flame.fill")
+                // The flame carries the accent whether or not the streak is
+                // alive: a grey flame next to a zero reads as a broken feature
+                // rather than as a streak waiting to start.
+                .foregroundStyle(Theme.Palette.accent)
+                .font(.system(size: 14, weight: .bold))
+
+            Text("\(streak)")
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(.primary)
+                .contentTransition(.numericText())
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 7)
+        .background(Theme.Palette.surface, in: .capsule)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(streak == 1 ? "1 day streak" : "\(streak) day streak")
     }
 
     // MARK: - Home
 
     private var homePage: some View {
         List {
-            // Always present, in all three states — that's what lets it be the
-            // only call to action on the screen. There used to be a "Today"
-            // section that appeared only once a session existed, and a red
-            // button pinned to the bottom for when one didn't; the card is both,
-            // so neither is here any more.
             Section {
-                TodaySessionCard(
-                    state: cardState,
-                    onStart: start,
-                    onRegenerate: { showingSetup = true }
-                )
-                // Same insets as the dashboard below: the list style already
-                // insets the section, and a row inset is charged on top of it.
-                .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 12, trailing: 0))
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
+                masthead
+                    .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
             }
             .listSectionMargins(.horizontal, 16)
 
@@ -149,7 +236,7 @@ struct ContentView: View {
                     // Zero, not 16. The list style already insets the section,
                     // and any row inset is charged on top of that — the cards
                     // were paying the margin twice and coming out narrow.
-                    .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 12, trailing: 0))
+                    .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 8, trailing: 0))
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
             }
@@ -157,34 +244,11 @@ struct ContentView: View {
 
         }
         .scrollContentBackground(.hidden)
-    }
-
-    /// Home's three states, in the card's terms. The order matters: generating
-    /// wins over a session already on screen, so asking for "something else"
-    /// puts the card straight into its loading state rather than leaving the old
-    /// session sitting there looking startable.
-    private var cardState: TodaySessionCard.State {
-        if isGenerating { return .loading }
-        guard let planned else { return .empty }
-
-        let session = planned.session
-        return .ready(
-            TodaySessionCard.Plan(
-                // The first round's focus: the session's opening intent, and the
-                // closest the plan has to a one-word answer to "what's today?".
-                focus: session.rounds.first?.focus ?? session.title,
-                subtitle: session.intro ?? session.title,
-                roundCount: session.rounds.count,
-                totalSeconds: session.rounds.reduce(0) { $0 + $1.durationSeconds + $1.restSeconds },
-                origin: planned.origin
-            )
-        )
-    }
-
-    /// Bridges the card's plain closure to the async launch.
-    private func start() {
-        guard let planned else { return }
-        Task { await launch(planned.session) }
+        // 8, the same gap the dashboard tiles use between each other. The row
+        // insets above only control padding *inside* a section — the space
+        // between two sections is this, and left at its default it was reading
+        // as a break between two screens rather than a gap between two cards.
+        .listSectionSpacing(SummaryCards.gap)
     }
 
     private func generate() async {
@@ -197,7 +261,14 @@ struct ContentView: View {
         request.profile = profile
 
         let generator = SessionGenerator(client: try? ClaudeClient.fromBundle())
-        planned = await generator.plan(request)
+        let session = await generator.plan(request)
+        planned = session
+
+        // Straight into the workout. The Today card used to sit between these
+        // two steps — it held the written session and waited for a second tap
+        // on Start. With the card gone the sheet is the whole decision, so
+        // "Write it" means write it and go.
+        await launch(session.session)
     }
 
     /// Records what happened, so the next session can differ from this one.

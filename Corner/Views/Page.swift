@@ -8,6 +8,12 @@ enum Page: String, CaseIterable, Identifiable {
     case history
     case settings
 
+    /// Not a page. It's the trailing button beside the tab bar — selecting it
+    /// opens the setup sheet and hands the selection straight back, so it never
+    /// becomes the current tab. It needs a case only because `Tab` is keyed by
+    /// value and the detached slot has to have one.
+    case create
+
     var id: String { rawValue }
 
     var title: String {
@@ -16,6 +22,7 @@ enum Page: String, CaseIterable, Identifiable {
         case .coach: "Coach"
         case .history: "History"
         case .settings: "Settings"
+        case .create: "New session"
         }
     }
 
@@ -25,6 +32,7 @@ enum Page: String, CaseIterable, Identifiable {
         case .coach: "figure.boxing"
         case .history: "clock.arrow.circlepath"
         case .settings: "gearshape.fill"
+        case .create: "plus"
         }
     }
 }
