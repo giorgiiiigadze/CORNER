@@ -345,56 +345,48 @@ struct ContentView: View {
         }
     }
 
-    /// The two glass controls in Home's navigation bar.
+    /// The two controls in Home's navigation bar.
     ///
-    /// Toolbar items rather than a row drawn in the content: iOS 26 gives these
-    /// Liquid Glass, the scroll-edge behaviour and the hit targets for free, and
-    /// the hand-built masthead they replace had none of it — it was a logo and a
-    /// pill scrolling away with the dashboard like any other content.
+    /// Written the way Apple's own are: a `Button` with a title and a system
+    /// image, and nothing else. Toolbar items take Liquid Glass, their metrics
+    /// and their hit targets from the system on iOS 26 — the first version of
+    /// this set an explicit 52×30 frame inside each one and applied
+    /// `.buttonStyle(.glass)` by hand, which fought the sizing the bar was
+    /// already doing and produced two stretched lozenges that looked like
+    /// nothing else on the phone.
+    ///
+    /// The rule that follows: don't dress a toolbar item. Give it a label and
+    /// let the bar shape it.
     @ToolbarContentBuilder
     private var homeBar: some ToolbarContent {
         ToolbarItem(placement: .topBarLeading) {
-            Button {
-                // Nothing yet. Reminders are the obvious home for this — "you
-                // haven't trained since Tuesday" — and the bell is here because
-                // the layout was asked for, not because that exists.
-            } label: {
-                Image(systemName: "bell.fill")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: Self.barItemWidth, height: 30)
-            }
-            .buttonStyle(.glass)
-            .accessibilityLabel("Reminders")
+            // Nothing yet. Reminders are the obvious home for this — "you
+            // haven't trained since Tuesday" — and the bell is here because the
+            // layout was asked for, not because that exists.
+            Button("Reminders", systemImage: "bell.fill") {}
         }
 
         ToolbarItem(placement: .topBarTrailing) {
-            Button {
-                // The streak is a readout, not a control. It's a button only so
-                // it gets the same glass and the same metrics as the bell —
-                // a plain label in a toolbar sits at a different size and the
-                // pair stops looking like a pair.
-            } label: {
-                HStack(spacing: 5) {
+            // A button despite being a readout: a toolbar sizes a bare label
+            // differently from a control, and the two stop looking like a pair.
+            // A hand-built label, because a toolbar collapses `Label` to
+            // icon-only in this placement and `labelStyle` doesn't survive it —
+            // tried on the label and on the button, neither took. A flame with
+            // no number is most of a streak missing.
+            //
+            // What isn't hand-built is the size: no frame, no button style. The
+            // glass sizes itself around whatever it's given, and the first
+            // version's fixed 52×30 is exactly what made these look wrong.
+            Button {} label: {
+                HStack(spacing: 4) {
                     Image(systemName: "flame.fill")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.white)
-
                     Text("\(TrainingStats.from(history: history).streak)")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.white)
                         .contentTransition(.numericText())
                 }
-                .frame(width: Self.barItemWidth, height: 30)
             }
-            .buttonStyle(.glass)
             .accessibilityLabel("Training streak")
         }
     }
-
-    /// Both the same, so the two read as a pair rather than as one control and
-    /// one badge that happen to share a bar.
-    private static let barItemWidth: CGFloat = 52
 
     /// The calendar, full width.
     ///
