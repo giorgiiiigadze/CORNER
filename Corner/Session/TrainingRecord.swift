@@ -9,6 +9,25 @@ import SwiftData
 /// drilled hooks on Tuesday and asked twice for it to slow down.
 @Model
 final class TrainingRecord {
+    /// Names this session everywhere, on every device.
+    ///
+    /// Minted here rather than by the server, because the phone has to be able
+    /// to record a session before it has ever reached the network — a gym with
+    /// no signal is the normal case. The row upserts under this id whenever the
+    /// upload does happen, so a session can't be stored twice.
+    var remoteID: UUID = UUID()
+
+    /// Whether the server has this one yet. False for everything trained
+    /// offline, and for everything recorded before sync existed.
+    var isSynced: Bool = false
+
+    /// Whose session this was.
+    ///
+    /// Empty means it predates accounts. Those are claimed by the first user to
+    /// sign in after the upgrade — which is right for a single-user device and
+    /// is the only answer available, since nothing recorded an owner at the time.
+    var userID: String = ""
+
     var date: Date = Date()
     var title: String = ""
     /// The focus of each round, in order. The strongest signal we have about
@@ -36,6 +55,8 @@ final class TrainingRecord {
     var pauseCount: Int?
 
     init(
+        remoteID: UUID = UUID(),
+        userID: String = "",
         date: Date = .now,
         title: String,
         focuses: [String],
@@ -45,6 +66,8 @@ final class TrainingRecord {
         sessionSeconds: Int? = nil,
         pauseCount: Int? = nil
     ) {
+        self.remoteID = remoteID
+        self.userID = userID
         self.date = date
         self.title = title
         self.focuses = focuses
@@ -55,8 +78,9 @@ final class TrainingRecord {
         self.pauseCount = pauseCount
     }
 
-    convenience init(summary: SessionSummary, date: Date = .now) {
+    convenience init(summary: SessionSummary, userID: String, date: Date = .now) {
         self.init(
+            userID: userID,
             date: date,
             title: summary.title,
             focuses: summary.focuses,

@@ -13,11 +13,32 @@ struct ContentView: View {
 
     @State private var page = Page.home
 
+    /// Whose data this screen is showing. Everything below is scoped to it.
+    private let userID: String
+
     /// Newest first — the order the profile builder and the history list both want.
-    @Query(sort: \TrainingRecord.date, order: .reverse) private var history: [TrainingRecord]
+    @Query private var history: [TrainingRecord]
 
     /// Today's plan, persisted so it survives a relaunch mid-session.
-    @Query(sort: \TodaySession.generatedAt, order: .reverse) private var plans: [TodaySession]
+    @Query private var plans: [TodaySession]
+
+    /// The filters are built here rather than declared on the properties,
+    /// because a `@Query` predicate has to close over the signed-in user and a
+    /// property initialiser can't see one. Without this every account on a
+    /// shared phone would read the last one's history as its own.
+    init(userID: String) {
+        self.userID = userID
+        _history = Query(
+            filter: #Predicate<TrainingRecord> { $0.userID == userID },
+            sort: \TrainingRecord.date,
+            order: .reverse
+        )
+        _plans = Query(
+            filter: #Predicate<TodaySession> { $0.userID == userID },
+            sort: \TodaySession.generatedAt,
+            order: .reverse
+        )
+    }
     @Environment(\.modelContext) private var modelContext
     @AppStorage(TrainingProfile.levelKey) private var level: String = TrainingProfile.Level.beginner.rawValue
     @AppStorage(CoachingNotes.key) private var notesData: Data = Data()
@@ -28,6 +49,8 @@ struct ContentView: View {
     @State private var isGenerating = false
     @State private var showingSetup = false
     @State private var request = SessionRequest()
+
+    @Environment(AuthController.self) private var auth
 
     private let audioSession = AudioSessionController()
 
@@ -131,6 +154,12 @@ struct ContentView: View {
         .onChange(of: live == nil) { _, gone in
             if gone { audioSession.deactivate() }
         }
+        .task {
+            claimLegacyRecords()
+            // Claim first, then sync: a legacy record with no owner would
+            // otherwise be pushed under an empty user id, which RLS rejects.
+            await SessionSync(auth: auth, context: modelContext).run()
+        }
     }
 
     /// Every tab gets its own stack and a large title, which is the other half
@@ -151,6 +180,30 @@ struct ContentView: View {
                 .navigationBarTitleDisplayMode(page == .home ? .inline : .large)
                 .background(Theme.Palette.background)
         }
+    }
+
+    /// Hands sessions recorded before accounts existed to whoever signs in
+    /// first.
+    ///
+    /// They carry an empty owner, so the filtered queries above can't see them —
+    /// without this, upgrading the app would look exactly like losing every
+    /// session ever trained. Assigning them to the current user is the only
+    /// answer available: nothing recorded who trained them, and on a phone with
+    /// one owner it's also the right one.
+    private func claimLegacyRecords() {
+        guard !userID.isEmpty else { return }
+
+        let records = FetchDescriptor<TrainingRecord>(predicate: #Predicate { $0.userID == "" })
+        let plans = FetchDescriptor<TodaySession>(predicate: #Predicate { $0.userID == "" })
+
+        guard let orphanedRecords = try? modelContext.fetch(records),
+              let orphanedPlans = try? modelContext.fetch(plans),
+              !(orphanedRecords.isEmpty && orphanedPlans.isEmpty)
+        else { return }
+
+        for record in orphanedRecords { record.userID = userID }
+        for plan in orphanedPlans { plan.userID = userID }
+        try? modelContext.save()
     }
 
     /// Today's plan, if one was written today. One a day is the rule: the
@@ -379,7 +432,7 @@ struct ContentView: View {
         // abandoned halfway — or interrupted by a crash — can still be found and
         // finished. Written at the end it would only ever record what already
         // worked.
-        modelContext.insert(TodaySession(planned: session))
+        modelContext.insert(TodaySession(planned: session, userID: userID))
         try? modelContext.save()
 
         // Straight into the workout. The Today card used to sit between these
@@ -395,11 +448,17 @@ struct ContentView: View {
     /// screen shouldn't teach the cornerman anything.
     private func record(_ summary: SessionSummary) {
         guard summary.roundsCompleted > 0 else { return }
-        modelContext.insert(TrainingRecord(summary: summary))
+        modelContext.insert(TrainingRecord(summary: summary, userID: userID))
         // A dropped session is a lost lesson; surface it rather than swallow it.
         do { try modelContext.save() } catch {
             problem = "Couldn't save this session to your history: \(error.localizedDescription)"
         }
+
+        // Straight up to the account. Waiting for the next launch would mean a
+        // fighter who finishes a session and switches phones loses it — and the
+        // record is already safe locally, so a failure here costs nothing but a
+        // later retry.
+        Task { await SessionSync(auth: auth, context: modelContext).run() }
     }
 
     private func summary(of session: Session) -> String {
@@ -471,5 +530,6 @@ extension SessionEngine: Identifiable {
 }
 
 #Preview {
-    ContentView()
+    ContentView(userID: "preview")
+        .environment(AuthController())
 }

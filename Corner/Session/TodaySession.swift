@@ -19,6 +19,9 @@ final class TodaySession {
 
     /// Matches the underlying `Session.id`, so a stored card and the plan it
     /// came from can always be reconciled.
+    /// Whose plan this is. See `TrainingRecord.userID` — same rule, same reason.
+    var userID: String = ""
+
     var sessionID: String = ""
 
     /// Two or three words — what today is for. The card's headline.
@@ -45,6 +48,7 @@ final class TodaySession {
     var plan: Data?
 
     init(
+        userID: String = "",
         sessionID: String,
         focus: String,
         subtitle: String,
@@ -54,6 +58,7 @@ final class TodaySession {
         fromClaude: Bool = false,
         plan: Data? = nil
     ) {
+        self.userID = userID
         self.sessionID = sessionID
         self.focus = focus
         self.subtitle = subtitle
@@ -71,9 +76,10 @@ extension TodaySession {
     ///
     /// The focus is the first round's — the session's opening intent, and the
     /// closest thing the plan has to a one-word answer for "what's today?".
-    convenience init(planned: PlannedSession) {
+    convenience init(planned: PlannedSession, userID: String) {
         let session = planned.session
         self.init(
+            userID: userID,
             sessionID: session.id,
             focus: session.rounds.first?.focus ?? session.title,
             subtitle: session.intro ?? session.title,

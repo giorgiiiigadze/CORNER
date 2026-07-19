@@ -12,6 +12,7 @@ import SwiftUI
 /// how you leave.
 struct SettingsView: View {
 
+    @Environment(AuthController.self) private var auth
 
     @AppStorage(ElevenLabsVoice.preferenceKey) private var cornermanVoiceID: String = ElevenLabsCatalog.defaultVoiceID
 
@@ -22,8 +23,25 @@ struct SettingsView: View {
 
     private let preview = VoicePreviewer()
 
+    /// Who's signed in, and the way out. Deliberately the whole of the account
+    /// surface — there's no profile to edit, no name to set, and nothing else
+    /// the app knows about you that isn't on this screen already.
+    private var account: some View {
+        Section("Account") {
+            LabeledContent("Signed in", value: auth.email ?? "—")
+                .font(.subheadline)
+
+            Button("Sign out", role: .destructive) {
+                auth.signOut()
+            }
+            .font(.subheadline)
+        }
+    }
+
     var body: some View {
         List {
+            account
+
             Section {
                 cornermanVoices
             } header: {
