@@ -88,8 +88,8 @@ struct ContentView: View {
             Tab(Page.history.title, systemImage: Page.history.icon, value: .history) {
                 destination(.history) { HistoryPage(history: history, onDelete: delete) }
             }
-            Tab(Page.settings.title, systemImage: Page.settings.icon, value: .settings) {
-                destination(.settings) { SettingsView() }
+            Tab(Page.profile.title, systemImage: Page.profile.icon, value: .profile) {
+                destination(.profile) { ProfilePage(history: history) }
             }
 
             // The detached button beside the bar, and it's a real tab role

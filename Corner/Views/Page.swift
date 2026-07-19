@@ -6,7 +6,7 @@ enum Page: String, CaseIterable, Identifiable {
     case home
     case coach
     case history
-    case settings
+    case profile
 
     /// Not a page. It's the trailing button beside the tab bar — selecting it
     /// opens the setup sheet and hands the selection straight back, so it never
@@ -21,7 +21,7 @@ enum Page: String, CaseIterable, Identifiable {
         case .home: "Home"
         case .coach: "Coach"
         case .history: "History"
-        case .settings: "Settings"
+        case .profile: "Profile"
         case .create: "New session"
         }
     }
@@ -31,7 +31,7 @@ enum Page: String, CaseIterable, Identifiable {
         case .home: "house.fill"
         case .coach: "figure.boxing"
         case .history: "clock.arrow.circlepath"
-        case .settings: "gearshape.fill"
+        case .profile: "person.crop.circle.fill"
         case .create: "plus"
         }
     }

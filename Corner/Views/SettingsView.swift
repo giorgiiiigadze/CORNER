@@ -8,15 +8,13 @@ import SwiftUI
 /// screen is where the brand lives; spending personality here would only make
 /// the app feel less like Apple built it.
 ///
-/// A tab rather than a sheet, so there's nothing to dismiss — the tab bar is
-/// how you leave.
+/// Pushed from Profile rather than owning a tab. What's here is about the
+/// *app* — which voice it uses, whether it talks, what it answers to. What's
+/// about the *person* — the account, the record, whether the record is off the
+/// phone — is on Profile, one level up.
 struct SettingsView: View {
 
     @Environment(AuthController.self) private var auth
-    @Environment(\.modelContext) private var modelContext
-
-    @AppStorage(SessionSync.Report.resultKey) private var lastSync: String = "Not yet"
-    @State private var isSyncing = false
 
     @AppStorage(ElevenLabsVoice.preferenceKey) private var cornermanVoiceID: String = ElevenLabsCatalog.defaultVoiceID
     @AppStorage(SessionEngine.coachingKey) private var speaksCoaching: Bool = true
@@ -28,62 +26,8 @@ struct SettingsView: View {
 
     private let preview = VoicePreviewer()
 
-    /// Who's signed in, and the way out. Deliberately the whole of the account
-    /// surface — there's no profile to edit, no name to set, and nothing else
-    /// the app knows about you that isn't on this screen already.
-    private var account: some View {
-        Section("Account") {
-            LabeledContent("Signed in", value: auth.email ?? "—")
-                .font(.subheadline)
-
-            Button("Sign out", role: .destructive) {
-                auth.signOut()
-            }
-            .font(.subheadline)
-        }
-    }
-
-    /// Whether the sessions on this phone have reached the account.
-    ///
-    /// On screen rather than in a log, because this is the one thing on the
-    /// device the user can't otherwise find out and can't afford to be wrong
-    /// about: a backup that quietly isn't happening looks exactly like one that
-    /// is, right up until the phone is replaced.
-    private var backup: some View {
-        Section {
-            LabeledContent("Last backup", value: lastSync)
-                .font(.subheadline)
-
-            Button {
-                isSyncing = true
-                Task {
-                    await SessionSync(auth: auth, context: modelContext).run()
-                    isSyncing = false
-                }
-            } label: {
-                HStack {
-                    Text("Back up now")
-                    if isSyncing {
-                        Spacer()
-                        ProgressView()
-                    }
-                }
-            }
-            .font(.subheadline)
-            .disabled(isSyncing)
-        } header: {
-            Text("Training backup")
-        } footer: {
-            Text("Finished sessions are kept on this phone and copied to your account, so they follow you to a new device.")
-        }
-    }
-
     var body: some View {
         List {
-            account
-
-            backup
-
             Section {
                 Toggle("Talk me through it", isOn: $speaksCoaching)
                     .font(.subheadline)
@@ -109,6 +53,8 @@ struct SettingsView: View {
             }
         }
         .scrollContentBackground(.hidden)
+        .navigationTitle("Settings")
+        .navigationBarTitleDisplayMode(.inline)
         .task { await loadCornermanVoices() }
     }
 
