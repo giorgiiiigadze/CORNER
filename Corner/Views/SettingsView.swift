@@ -14,46 +14,88 @@ import SwiftUI
 /// phone — is on Profile, one level up.
 struct SettingsView: View {
 
+    /// The chosen voice's name, remembered so the row can say which one is on
+    /// without a network round-trip to find out.
+    nonisolated static let voiceNameKey = "cornerman.voiceName"
+
+    @AppStorage(SessionEngine.coachingKey) private var speaksCoaching: Bool = true
+    @AppStorage(SettingsView.voiceNameKey) private var cornermanVoiceName: String = ""
+
+    var body: some View {
+        List {
+            Section {
+                SettingRow(
+                    title: "Talk me through it",
+                    description: speaksCoaching
+                        ? "The cornerman calls each round and what it's for."
+                        : "Bell and clock only. He still answers your commands."
+                ) {
+                    Toggle("", isOn: $speaksCoaching)
+                        .labelsHidden()
+                        // Stated, not inherited. The tab bar tints this subtree
+                        // white, which would leave an "on" toggle as a white
+                        // track on a grey card — on and off telling each other
+                        // apart by a shade.
+                        .tint(Theme.Palette.accentLight)
+                }
+            }
+
+            Section {
+                NavigationLink {
+                    VoicePicker()
+                } label: {
+                    SettingRow(
+                        title: "Cornerman voice",
+                        description: cornermanVoiceName.isEmpty
+                            ? "Pick a voice you'd take instructions from."
+                            : cornermanVoiceName
+                    )
+                }
+
+                NavigationLink {
+                    CommandsList()
+                } label: {
+                    SettingRow(
+                        title: "Voice commands",
+                        description: "The nine things he answers to, hands-free."
+                    )
+                }
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .navigationTitle("Settings")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+/// The voice list, on its own screen.
+///
+/// Pushed rather than inline because it's a dozen rows that each cost a network
+/// fetch to describe — on the settings screen itself they buried two actual
+/// settings under a wall of names.
+struct VoicePicker: View {
+
     @Environment(AuthController.self) private var auth
 
     @AppStorage(ElevenLabsVoice.preferenceKey) private var cornermanVoiceID: String = ElevenLabsCatalog.defaultVoiceID
-    @AppStorage(SessionEngine.coachingKey) private var speaksCoaching: Bool = true
+    @AppStorage(SettingsView.voiceNameKey) private var cornermanVoiceName: String = ""
 
     @State private var cornerman: [ElevenLabsCatalog.Entry] = []
     @State private var cornermanProblem: String?
     @State private var loadingCornerman = true
-
 
     private let preview = VoicePreviewer()
 
     var body: some View {
         List {
             Section {
-                Toggle("Talk me through it", isOn: $speaksCoaching)
-                    .font(.subheadline)
-            } footer: {
-                Text(speaksCoaching
-                     ? "The cornerman calls each round and what it's for."
-                     : "Bell and clock only. He still answers your commands — \u{201C}pause\u{201D}, \u{201C}how much time\u{201D} — he just won't talk over the work.")
-            }
-
-            Section {
                 cornermanVoices
-            } header: {
-                Text("Cornerman voice")
             } footer: {
                 Text("Tap to hear it. The voice is the app — pick one you'd take instructions from.")
             }
-
-            Section("The twelve commands") {
-                ForEach(CommandReference.all, id: \.command) { entry in
-                    LabeledContent(entry.say, value: entry.does)
-                        .font(.subheadline)
-                }
-            }
         }
         .scrollContentBackground(.hidden)
-        .navigationTitle("Settings")
+        .navigationTitle("Cornerman voice")
         .navigationBarTitleDisplayMode(.inline)
         .task { await loadCornermanVoices() }
     }
@@ -88,6 +130,9 @@ struct SettingsView: View {
             ForEach(cornerman) { voice in
                 Button {
                     cornermanVoiceID = voice.id
+                    // Stored so Settings can name the current voice without
+                    // fetching the whole catalogue to render one line.
+                    cornermanVoiceName = voice.name
                     if let url = voice.previewURL { preview.play(url: url) }
                 } label: {
                     HStack {
@@ -123,16 +168,32 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - Pieces
+}
 
-
-
+/// What he answers to. Reference, not settings — nothing here is adjustable,
+/// which is exactly why it doesn't belong on the screen where things are.
+struct CommandsList: View {
+    var body: some View {
+        List {
+            Section {
+                ForEach(CommandReference.all, id: \.command) { entry in
+                    LabeledContent(entry.say, value: entry.does)
+                        .font(.subheadline)
+                }
+            } footer: {
+                Text("Say them at any point in a session. He answers even with the coaching turned off.")
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .navigationTitle("Voice commands")
+        .navigationBarTitleDisplayMode(.inline)
+    }
 }
 
 /// Speaks the sample line. Separate from `Cornerman` because a preview has no
 /// business muting the recognizer or waiting for anything.
 @MainActor
-private final class VoicePreviewer {
+final class VoicePreviewer {
     private let synthesizer = AVSpeechSynthesizer()
     private var player: AVPlayer?
 
