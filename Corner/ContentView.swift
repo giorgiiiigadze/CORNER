@@ -461,6 +461,10 @@ struct ContentView: View {
 
         }
         .toolbar { homeBar }
+        // The list's own top inset, trimmed. It's sized for a large title, and
+        // Home doesn't have one — the calendar was sitting a title's worth of
+        // space below a bar with nothing in it but two buttons.
+        .contentMargins(.top, 4, for: .scrollContent)
         .scrollContentBackground(.hidden)
         // The iOS 26 scroll-edge effect, on the top edge only. Content was
         // passing under the status bar with nothing between them — the clock and

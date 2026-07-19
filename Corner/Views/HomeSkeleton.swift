@@ -34,12 +34,16 @@ struct HomeSkeleton: View {
             Spacer()
         }
         .padding(.horizontal, 16)
-        // Measured against the real screen rather than derived. Home's content
-        // sits inside a `NavigationStack` and a `List`, and the inset those add
-        // came to 37pt on an iPhone 17 — reproducing the containers here didn't
-        // reproduce the inset, so the number is taken from the screen. Re-check
-        // it if the calendar ever looks like it jumps on load.
-        .padding(.top, 37)
+        // Measured against the real screen rather than derived: Home's content
+        // sits in a `NavigationStack` and a `List`, and reproducing those
+        // containers here didn't reproduce their insets, so this is read off a
+        // screenshot instead.
+        //
+        // It's a constant that has to be re-measured whenever Home's top
+        // spacing moves — it was 37 until the list's top content margin was
+        // trimmed, which lifted the real calendar and left this 21pt high.
+        // If the calendar ever jumps on load, this is the line.
+        .padding(.top, 58)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.Palette.background)
         .opacity(dim ? 0.55 : 1)
