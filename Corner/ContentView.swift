@@ -363,7 +363,19 @@ struct ContentView: View {
             // Nothing yet. Reminders are the obvious home for this — "you
             // haven't trained since Tuesday" — and the bell is here because the
             // layout was asked for, not because that exists.
-            Button("Reminders", systemImage: "bell.fill") {}
+            Button {} label: {
+                Image(systemName: "bell.fill")
+                    // Padding on the label, not a frame on the button.
+                    //
+                    // `.controlSize(.extraLarge)` and `.buttonBorderShape(...)`
+                    // are the documented levers and neither does anything in
+                    // this placement — both were tried and both were no-ops. The
+                    // glass capsule hugs whatever it's given, so widening the
+                    // content is what widens the button, and the system still
+                    // owns the height, the material and the corner radius.
+                    .padding(.horizontal, 10)
+            }
+            .accessibilityLabel("Reminders")
         }
 
         ToolbarItem(placement: .topBarTrailing) {
@@ -378,11 +390,12 @@ struct ContentView: View {
             // glass sizes itself around whatever it's given, and the first
             // version's fixed 52×30 is exactly what made these look wrong.
             Button {} label: {
-                HStack(spacing: 4) {
+                HStack(spacing: 5) {
                     Image(systemName: "flame.fill")
                     Text("\(TrainingStats.from(history: history).streak)")
                         .contentTransition(.numericText())
                 }
+                .padding(.horizontal, 6)
             }
             .accessibilityLabel("Training streak")
         }
