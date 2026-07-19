@@ -64,40 +64,62 @@ struct RecentSessions: View {
         }
     }
 
-    /// The one row you can act on: what's left of today, and a way back into it.
+    /// The one card you can act on: what's left of today, and the way back in.
+    ///
+    /// Built to the same pattern as a finished session — title and status, then
+    /// a headline, then the detail — so the difference between them is what they
+    /// *say*, not how they're drawn. The previous version was its own layout
+    /// entirely: a progress bar and a button elbowing each other in one row,
+    /// with the title squeezed to a caption beside them.
     private func resumeRow(_ unfinished: Unfinished) -> some View {
-        Button(action: onResume) {
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(unfinished.title)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-
-                    Text("\(unfinished.done) of \(unfinished.total) rounds")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    // The same fraction the calendar ring draws, as a bar. Two
-                    // readings of one number, in the two places you'd look.
-                    ProgressView(value: unfinished.fraction)
-                        .progressViewStyle(.linear)
-                        .tint(Theme.Palette.accent)
-                }
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(unfinished.title)
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
 
                 Spacer(minLength: 8)
 
+                // Says why this card looks different from the ones below it.
+                // Without it the only clue is the button, which is a thing to
+                // press rather than a thing to read.
+                Text("In progress")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Theme.Palette.accentLight)
+            }
+
+            HStack(spacing: 8) {
+                Image(systemName: "figure.boxing")
+                    .font(.system(size: 19, weight: .semibold))
+                    .foregroundStyle(Theme.Palette.accentLight)
+
+                Text("\(unfinished.done) of \(unfinished.total) rounds")
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(.primary)
+            }
+
+            // Full width, under the headline rather than beside it. The same
+            // fraction the calendar ring draws — two readings of one number, in
+            // the two places you'd look for it.
+            ProgressView(value: unfinished.fraction)
+                .progressViewStyle(.linear)
+                .tint(Theme.Palette.accentLight)
+
+            Button(action: onResume) {
                 Text("Resume")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.white)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 44)
                     .background(Theme.Palette.accent, in: .capsule)
             }
-            .padding(14)
-            .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 18))
+            .buttonStyle(.plain)
+            .padding(.top, 2)
         }
-        .buttonStyle(.plain)
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 18))
     }
 
     /// One session: what it was and when, the headline underneath, and the
