@@ -1,13 +1,16 @@
 import SwiftData
 import SwiftUI
 
-/// Who you are, what you've done, and the way to everything else.
+/// Who you are and what you've built.
 ///
-/// The split from Settings is by subject, not by convenience: this page is about
-/// the *person* — the account, the record, whether the record is safely off the
-/// phone — and Settings is about the *app*, which voice it uses and whether it
-/// talks. Preferences that would follow a fighter to a new phone belong here;
-/// preferences that belong to this install belong there.
+/// Centred and top-heavy on purpose — the shape every profile screen has, and it
+/// earns its place here: the avatar and the three numbers under it are the whole
+/// point of the page, and a fighter opening it is looking for a total, not a
+/// control. Everything adjustable is one tap further in.
+///
+/// The split from Settings is by subject. This page is about the *person* — the
+/// account, the record, whether that record is safely off the phone. Settings is
+/// about the *app*: which voice it uses, whether it talks.
 struct ProfilePage: View {
 
     let history: [TrainingRecord]
@@ -21,74 +24,89 @@ struct ProfilePage: View {
     private var stats: TrainingStats { TrainingStats.from(history: history) }
 
     var body: some View {
-        List {
-            identity
-            record
-            backup
-
-            Section {
-                NavigationLink {
-                    SettingsView()
-                } label: {
-                    Label("Settings", systemImage: "gearshape.fill")
-                        .font(.subheadline)
-                }
+        ScrollView {
+            VStack(spacing: 28) {
+                identity
+                totals
+                backup
+                settingsLink
             }
-
-            Section {
-                Button("Sign out", role: .destructive) {
-                    auth.signOut()
-                }
-                .font(.subheadline)
-            }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 32)
         }
-        .scrollContentBackground(.hidden)
+        .scrollIndicators(.hidden)
+        .background(Theme.Palette.background)
     }
 
-    // MARK: - Sections
+    // MARK: - Identity
 
-    /// The mark and the address, at the top, doing what a profile header does:
-    /// answering "whose app is this" before anything else on the screen.
     private var identity: some View {
-        Section {
-            HStack(spacing: 14) {
-                Circle()
-                    .fill(Theme.Palette.accentLight)
-                    .frame(width: 52, height: 52)
-                    .overlay {
-                        Image(systemName: "figure.boxing")
-                            .font(.system(size: 26, weight: .bold))
-                            .foregroundStyle(.white)
-                    }
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(auth.email ?? "Signed in")
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-
-                    Text(stats.totalSessions == 1 ? "1 session" : "\(stats.totalSessions) sessions")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+        VStack(spacing: 12) {
+            Circle()
+                .fill(Theme.Palette.accentLight)
+                .frame(width: 96, height: 96)
+                .overlay {
+                    Image(systemName: "figure.boxing")
+                        .font(.system(size: 46, weight: .bold))
+                        .foregroundStyle(.white)
                 }
+
+            // The address until there's a name to show. `display_name` is in the
+            // profiles table waiting for it, and this is the line it lands on.
+            Text(auth.email ?? "Signed in")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+
+            if let since = stats.lastTrained {
+                Text("Last trained \(since.formatted(.relative(presentation: .named)))")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
-            .padding(.vertical, 6)
-            .listRowBackground(Color.clear)
         }
     }
 
-    /// The totals, not this week's. The dashboard on Home is for whether you're
-    /// still going; this is for what you've built, which is the number a profile
-    /// is for.
-    private var record: some View {
-        Section("Record") {
-            LabeledContent("Sessions", value: "\(stats.totalSessions)")
-            LabeledContent("Rounds", value: "\(stats.totalRounds)")
-            LabeledContent("Minutes", value: "\(stats.minutesTotal)")
-            LabeledContent("Streak", value: stats.streak == 1 ? "1 day" : "\(stats.streak) days")
+    // MARK: - Totals
+
+    /// Three numbers in a row, big over small. The all-time figures, not this
+    /// week's: Home already answers "am I still going", and this answers "what
+    /// have I done", which is the question a profile is for.
+    private var totals: some View {
+        HStack(spacing: 0) {
+            total("\(stats.totalSessions)", "Sessions")
+            divider
+            total("\(stats.totalRounds)", "Rounds")
+            divider
+            total("\(stats.minutesTotal)", "Minutes")
         }
-        .font(.subheadline)
+        .padding(.vertical, 18)
+        .frame(maxWidth: .infinity)
+        .background(Theme.Palette.surface, in: .rect(cornerRadius: 18))
     }
+
+    private func total(_ value: String, _ label: String) -> some View {
+        VStack(spacing: 4) {
+            Text(value)
+                .font(.system(size: 26, weight: .bold, design: .rounded))
+                .foregroundStyle(.primary)
+                .contentTransition(.numericText())
+
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    /// Hairlines between the three, not around them — the row is one object.
+    private var divider: some View {
+        Rectangle()
+            .fill(Color(.separator))
+            .frame(width: 1, height: 28)
+    }
+
+    // MARK: - Backup
 
     /// Whether the sessions on this phone have reached the account.
     ///
@@ -97,9 +115,17 @@ struct ProfilePage: View {
     /// backup that quietly isn't happening looks exactly like one that is, right
     /// up until the phone is replaced.
     private var backup: some View {
-        Section {
-            LabeledContent("Last backup", value: lastSync)
-                .font(.subheadline)
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text("Training backup")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Spacer()
+                Text(lastSync)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
 
             Button {
                 isSyncing = true
@@ -108,20 +134,52 @@ struct ProfilePage: View {
                     isSyncing = false
                 }
             } label: {
-                HStack {
-                    Text("Back up now")
+                Group {
                     if isSyncing {
-                        Spacer()
-                        ProgressView()
+                        ProgressView().tint(.white)
+                    } else {
+                        Text("Back up now").font(.subheadline.weight(.semibold))
                     }
                 }
+                .frame(maxWidth: .infinity)
+                .frame(height: 44)
+                .background(Theme.Palette.accent, in: .capsule)
+                .foregroundStyle(.white)
             }
-            .font(.subheadline)
             .disabled(isSyncing)
-        } header: {
-            Text("Training backup")
-        } footer: {
-            Text("Finished sessions are kept on this phone and copied to your account, so they follow you to a new device.")
+
+            Text("Finished sessions are copied to your account, so they follow you to a new phone.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
+        .padding(16)
+        .background(Theme.Palette.surface, in: .rect(cornerRadius: 18))
+    }
+
+    // MARK: - Settings
+
+    private var settingsLink: some View {
+        NavigationLink {
+            SettingsView()
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "gearshape.fill")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+
+                Text("Settings")
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(.primary)
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(16)
+            .background(Theme.Palette.surface, in: .rect(cornerRadius: 18))
+        }
+        .buttonStyle(.plain)
     }
 }

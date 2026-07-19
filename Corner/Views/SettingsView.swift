@@ -18,6 +18,8 @@ struct SettingsView: View {
     /// without a network round-trip to find out.
     nonisolated static let voiceNameKey = "cornerman.voiceName"
 
+    @Environment(AuthController.self) private var auth
+
     @AppStorage(SessionEngine.coachingKey) private var speaksCoaching: Bool = true
     @AppStorage(SettingsView.voiceNameKey) private var cornermanVoiceName: String = ""
 
@@ -61,6 +63,17 @@ struct SettingsView: View {
                         description: "The nine things he answers to, hands-free."
                     )
                 }
+            }
+            .listRowBackground(Color(.tertiarySystemGroupedBackground))
+
+            // Last, and on its own. Sign-out is the one thing here that can't be
+            // undone by tapping again, and it has no business sitting a
+            // thumb's-width from a voice picker.
+            Section {
+                Button("Sign out", role: .destructive) {
+                    auth.signOut()
+                }
+                .font(.body)
             }
             .listRowBackground(Color(.tertiarySystemGroupedBackground))
         }
