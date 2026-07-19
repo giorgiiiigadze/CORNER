@@ -19,6 +19,7 @@ struct SettingsView: View {
     @State private var isSyncing = false
 
     @AppStorage(ElevenLabsVoice.preferenceKey) private var cornermanVoiceID: String = ElevenLabsCatalog.defaultVoiceID
+    @AppStorage(SessionEngine.coachingKey) private var speaksCoaching: Bool = true
 
     @State private var cornerman: [ElevenLabsCatalog.Entry] = []
     @State private var cornermanProblem: String?
@@ -82,6 +83,15 @@ struct SettingsView: View {
             account
 
             backup
+
+            Section {
+                Toggle("Talk me through it", isOn: $speaksCoaching)
+                    .font(.subheadline)
+            } footer: {
+                Text(speaksCoaching
+                     ? "The cornerman calls each round and what it's for."
+                     : "Bell and clock only. He still answers your commands — \u{201C}pause\u{201D}, \u{201C}how much time\u{201D} — he just won't talk over the work.")
+            }
 
             Section {
                 cornermanVoices

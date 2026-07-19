@@ -43,6 +43,11 @@ struct ContentView: View {
     @AppStorage(TrainingProfile.levelKey) private var level: String = TrainingProfile.Level.beginner.rawValue
     @AppStorage(CoachingNotes.key) private var notesData: Data = Data()
 
+    /// On by default: a cornerman who says nothing is a timer, and the coaching
+    /// is what the app is for. Turning it off is a choice, not the starting
+    /// point.
+    @AppStorage(SessionEngine.coachingKey) private var speaksCoaching: Bool = true
+
     @State private var live: SessionEngine?
     @State private var problem: String?
     @State private var planned: PlannedSession?
@@ -571,6 +576,7 @@ struct ContentView: View {
             session: session,
             voice: voice,
             recognizer: SpeechAnalyzerRecognizer(),
+            speaksCoaching: speaksCoaching,
             // Same key as the session writer, and the same shrug when there
             // isn't one: no key means the phrase list, which still works.
             intent: CommandInterpreter(client: ClaudeClient.viaProxy(token: { [auth] in await auth.token() }))

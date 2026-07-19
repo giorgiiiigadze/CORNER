@@ -160,7 +160,8 @@ struct SessionEngineTests {
 
     private func makeEngine(
         intent: (any IntentReader)? = nil,
-        ticker: any Ticker = GateTicker()
+        ticker: any Ticker = GateTicker(),
+        speaksCoaching: Bool = true
     ) -> (SessionEngine, FakeVoice, FakeRecognizer, FakeBell) {
         let voice = FakeVoice()
         let recognizer = FakeRecognizer()
@@ -169,6 +170,7 @@ struct SessionEngineTests {
             session: testSession,
             voice: voice,
             recognizer: recognizer,
+            speaksCoaching: speaksCoaching,
             intent: intent,
             ticker: ticker,
             bell: bell
@@ -295,6 +297,41 @@ struct SessionEngineTests {
 
     /// The order is the point. The bell means one thing — start punching — and a
     /// line said over a running clock turns three minutes into two-fifty.
+    /// The silent mode is bell-and-clock, not a mute button: the round still
+    /// starts on time and the commands still answer.
+    @Test func silenceSkipsTheCoachingButStillRingsTheBell() async throws {
+        let (engine, voice, recognizer, bell) = makeEngine(speaksCoaching: false)
+        await voice.hold()
+        try await engine.beginListening()
+        await recognizer.hear(.start)
+        await settle()
+
+        // No intro, no round line — so nothing is holding the bell back.
+        #expect(bell.rings == 1, "the round starts without waiting on a line")
+        #expect(engine.phase == .active)
+
+        let spoken = await voice.lines
+        #expect(
+            !spoken.contains("Round 1. Straight punches. Long and straight."),
+            "the round opener is coaching and must stay quiet"
+        )
+    }
+
+    /// Commands must still answer with the coaching off, or a fighter is talking
+    /// to a phone that never replies and can't tell heard from missed.
+    @Test func silenceStillAcknowledgesCommands() async throws {
+        let (engine, voice, recognizer, _) = makeEngine(speaksCoaching: false)
+        try await engine.beginListening()
+        await recognizer.hear(.start)
+        await settle()
+
+        await recognizer.hear(.pause)
+        await settle()
+
+        #expect(engine.isPaused)
+        #expect(await voice.lines.contains("Pausing."))
+    }
+
     @Test func theOpenerIsSaidBeforeTheBell() async throws {
         let (engine, voice, recognizer, bell) = makeEngine()
         await voice.hold()

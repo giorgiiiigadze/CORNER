@@ -196,10 +196,27 @@ final class SessionEngine {
     /// six pauses in six rounds is a session that was too much.
     private var pauseCount = 0
 
+    /// Where the coaching preference lives. Read at the call site rather than
+    /// here so tests can set it either way without touching `UserDefaults`.
+    nonisolated static let coachingKey = "cornerman.speaksCoaching"
+
+    /// Whether the cornerman explains the work or just runs it.
+    ///
+    /// Off, the session becomes bell-and-clock with voice control: commands
+    /// still answer, the time check still speaks, the bell still rings. What
+    /// goes quiet is the narration — the intro and each round's "Round 3. Body
+    /// work. Stay low."
+    ///
+    /// That's the distinction worth keeping. Silencing the acknowledgements too
+    /// would leave a fighter talking to a phone that never answers, with no way
+    /// to tell a heard command from a missed one.
+    private let speaksCoaching: Bool
+
     init(
         session: Session,
         voice: any Voice,
         recognizer: any VoiceRecognizer,
+        speaksCoaching: Bool = true,
         // Nil means the phrase list is the whole story — no key, or a caller
         // that doesn't want the network. The session runs identically either
         // way; it just understands fewer ways of saying things.
@@ -213,6 +230,7 @@ final class SessionEngine {
         self.session = session
         self.voice = voice
         self.recognizer = recognizer
+        self.speaksCoaching = speaksCoaching
         self.intent = intent
         self.ticker = ticker
         self.bell = bell ?? Bell()
@@ -227,7 +245,7 @@ final class SessionEngine {
         // that dead time is exactly the budget a cloud voice needs. By the time
         // they say "let's go", the intro is already sitting on disk.
         Task { [voice, session] in
-            await voice.prewarm(Self.openingLines(of: session))
+            await voice.prewarm(Self.openingLines(of: session, coaching: speaksCoaching))
         }
 
         try await recognizer.start()
@@ -442,10 +460,18 @@ final class SessionEngine {
     /// Time-check answers aren't here on purpose: there are ~180 of them, they're
     /// only heard when asked for, and they're identical in every session forever,
     /// so they cost one fetch each ever and then come from the cache.
-    nonisolated static func openingLines(of session: Session) -> [String] {
+    nonisolated static func openingLines(of session: Session, coaching: Bool = true) -> [String] {
         var lines: [String] = []
-        if let intro = session.intro { lines.append(intro) }
-        if let first = session.rounds.first { lines.append(openerLine(for: first)) }
+
+        // Skipped entirely when the cornerman isn't explaining. These are the
+        // only per-session lines in the batch — every other line below is the
+        // same words in every session forever — so not fetching them is the
+        // whole saving: a cloud voice charges per character, and a fighter who
+        // trains silently shouldn't pay for narration nobody hears.
+        if coaching {
+            if let intro = session.intro { lines.append(intro) }
+            if let first = session.rounds.first { lines.append(openerLine(for: first)) }
+        }
 
         // Answers that can land at any moment, so they can't be fetched when
         // they're due — a "pausing" that arrives a second after the pause is
@@ -474,7 +500,7 @@ final class SessionEngine {
 
         // Before the first bell: what today is for, and the one thing to hold
         // onto all the way through.
-        if let intro = session.intro {
+        if speaksCoaching, let intro = session.intro {
             phase = .announcing
             await say(intro)
             guard !Task.isCancelled else { return }
@@ -488,7 +514,7 @@ final class SessionEngine {
             // Fetch the next round's line now, while this one is being worked.
             // Three minutes of slack is far more than a cloud voice needs, and it
             // means a session abandoned at round two never pays for round six.
-            if index + 1 < rounds.count {
+            if speaksCoaching, index + 1 < rounds.count {
                 let next = rounds[index + 1]
                 Task { [voice] in await voice.prewarm([Self.openerLine(for: next)]) }
             }
@@ -497,9 +523,11 @@ final class SessionEngine {
             // In that order: the bell means start punching and nothing else, and
             // a line said over a running clock is three minutes that became two
             // minutes fifty.
-            phase = .announcing
-            await say(Self.openerLine(for: round))
-            guard !Task.isCancelled else { return }
+            if speaksCoaching {
+                phase = .announcing
+                await say(Self.openerLine(for: round))
+                guard !Task.isCancelled else { return }
+            }
 
             phase = .active
             bell.ring()
