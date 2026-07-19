@@ -226,7 +226,7 @@ private struct Card<Content: View>: View {
     /// the tiles' `.subheadline` looked like a caption at that size. A parameter
     /// rather than a second `Card`, so the padding, corner and fill stay in one
     /// place and can't drift between the two.
-    var titleFont: Font = .subheadline.weight(.semibold)
+    var titleFont: Font = .headline.weight(.bold)
     /// Off for the hero, on for the tiles — the shape Fitness uses, where the
     /// Activity Ring carries no chevron and the four tiles below it all do.
     var showsChevron: Bool = true
@@ -252,7 +252,7 @@ private struct Card<Content: View>: View {
 
             Text(caption)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.white)
                 // The caption swaps between "All time" and a date. A digit roll
                 // is wrong for words; a cross-fade is what the system does for
                 // changing text.
@@ -279,9 +279,9 @@ private struct Chevron: View {
     var body: some View {
         Image(systemName: "chevron.right")
             .font(.caption2.weight(.bold))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Color(.secondarySystemGroupedBackground))
             .padding(5)
-            .background(Color(.tertiarySystemFill), in: .circle)
+            .background(.quaternary, in: .circle)
             // Decoration, not a control — the card itself is what a fighter
             // would tap once these lead anywhere, so this must not become a
             // second VoiceOver stop announcing "button" on top of it.
@@ -300,7 +300,7 @@ private struct Footnote: View {
     var body: some View {
         Text(text)
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.white)
             .lineLimit(1)
             .minimumScaleFactor(0.8)
             .contentTransition(.opacity)
