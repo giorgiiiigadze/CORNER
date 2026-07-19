@@ -120,7 +120,7 @@ struct SettingsView: View {
         cornermanProblem = nil
         defer { loadingCornerman = false }
         do {
-            cornerman = try await ElevenLabsCatalog.load()
+            cornerman = try await ElevenLabsCatalog.load(token: { await auth.token() })
         } catch {
             cornermanProblem = error.localizedDescription
         }

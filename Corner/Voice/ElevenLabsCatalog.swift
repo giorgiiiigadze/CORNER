@@ -58,7 +58,7 @@ nonisolated struct ElevenLabsCatalog: Sendable {
         var errorDescription: String? {
             switch self {
             case .missingKey:
-                "No ElevenLabs key. Add ELEVENLABS_API_KEY to Secrets.xcconfig."
+                "Sign in to choose a cornerman voice."
             case .missingPermission:
                 // Worth its own case: the fix is one toggle on the key, and the
                 // generic "401" would send you hunting for the wrong thing.
@@ -70,13 +70,14 @@ nonisolated struct ElevenLabsCatalog: Sendable {
     }
 
     /// Every voice on the account, for the picker.
-    static func load() async throws -> [Entry] {
-        guard let key = Bundle.main.object(forInfoDictionaryKey: "ELEVENLABS_API_KEY") as? String,
-              !key.isEmpty
-        else { throw Failure.missingKey }
+    static func load(token: @Sendable () async -> String?) async throws -> [Entry] {
+        // No key to be missing any more — what can be missing is a session, and
+        // that's what this now means: signed out, so the picker can't be filled.
+        guard let session = await token() else { throw Failure.missingKey }
 
-        var request = URLRequest(url: URL(string: "https://api.elevenlabs.io/v1/voices")!)
-        request.setValue(key, forHTTPHeaderField: "xi-api-key")
+        var request = URLRequest(url: Supabase.functionURL.appending(path: "voices"))
+        request.setValue(Supabase.publishableKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(session)", forHTTPHeaderField: "authorization")
 
         let (data, response) = try await URLSession.shared.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? -1

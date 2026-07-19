@@ -24,7 +24,7 @@ actor ElevenLabsVoice: Voice {
     /// The quality model. Latency is irrelevant here — see the note above.
     static let model = "eleven_multilingual_v2"
 
-    private let apiKey: String
+    private let token: @Sendable () async -> String?
     private let voiceID: String
     private let cache: AudioCache
     private let player = AudioPlayer()
@@ -36,13 +36,13 @@ actor ElevenLabsVoice: Voice {
     private var prewarmTasks: [Task<Void, Never>] = []
 
     init(
-        apiKey: String,
+        token: @escaping @Sendable () async -> String?,
         voiceID: String,
         fallback: any Voice,
         cache: AudioCache = AudioCache(),
         urlSession: URLSession = .shared
     ) {
-        self.apiKey = apiKey
+        self.token = token
         self.voiceID = voiceID
         self.fallback = fallback
         self.cache = cache
@@ -51,16 +51,17 @@ actor ElevenLabsVoice: Voice {
 
     /// Nil when there's no key, so the app quietly stays on the native voice
     /// rather than failing.
-    static func fromBundle(fallback: any Voice) -> ElevenLabsVoice? {
-        // Unset in Secrets.xcconfig, the substitution leaves an empty string, so
-        // that — not any prefix — is the real test. ElevenLabs has issued both
-        // bare-hex and sk_-prefixed keys; matching on a format rejects valid ones.
-        guard let key = Bundle.main.object(forInfoDictionaryKey: "ELEVENLABS_API_KEY") as? String,
-              !key.isEmpty
-        else { return nil }
-
+    /// Speaks through the Edge Function, which holds the ElevenLabs key.
+    ///
+    /// No longer optional: there's no key to be missing. Whether the cloud voice
+    /// is reachable is decided per line, at `audio(for:)` — and when it isn't,
+    /// `fallback` says the line on-device rather than opening a round in silence.
+    static func viaProxy(
+        fallback: any Voice,
+        token: @escaping @Sendable () async -> String?
+    ) -> ElevenLabsVoice {
         let voiceID = UserDefaults.standard.string(forKey: preferenceKey) ?? ElevenLabsCatalog.defaultVoiceID
-        return ElevenLabsVoice(apiKey: key, voiceID: voiceID, fallback: fallback)
+        return ElevenLabsVoice(token: token, voiceID: voiceID, fallback: fallback)
     }
 
     // MARK: - Voice
@@ -148,14 +149,19 @@ actor ElevenLabsVoice: Voice {
         }
         guard !Task.isCancelled else { return nil }
 
-        var request = URLRequest(url: URL(string: "https://api.elevenlabs.io/v1/text-to-speech/\(voiceID)")!)
+        guard let token = await token() else { return nil }
+
+        var request = URLRequest(url: Supabase.functionURL.appending(path: "voice"))
         request.httpMethod = "POST"
-        request.setValue(apiKey, forHTTPHeaderField: "xi-api-key")
+        request.setValue(Supabase.publishableKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "authorization")
         request.setValue("application/json", forHTTPHeaderField: "content-type")
         request.setValue("audio/mpeg", forHTTPHeaderField: "accept")
+        // The voice model is the server's choice, like Claude's. All the app
+        // sends is what to say and in whose voice.
         request.httpBody = try? JSONSerialization.data(withJSONObject: [
             "text": text,
-            "model_id": Self.model,
+            "voiceId": voiceID,
         ])
 
         do {

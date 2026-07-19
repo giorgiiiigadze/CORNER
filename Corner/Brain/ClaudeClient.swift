@@ -18,6 +18,9 @@ import os
 /// Bundling them makes switching models a one-line change instead of a 400 that
 /// only shows up at runtime.
 nonisolated struct ClaudeModel: Sendable {
+    /// What the app calls this model when asking the proxy for it. The id and
+    /// the token budget are the server's business.
+    let name: String
     let id: String
     let maxTokens: Int
     /// Off for Haiku 4.5 — the model has no adaptive mode, and sending one is a 400.
@@ -27,6 +30,7 @@ nonisolated struct ClaudeModel: Sendable {
     /// several seconds faster, with no loss of combo quality on this task.
     /// Writing boxing combinations is not a frontier problem.
     static let haiku = ClaudeModel(
+        name: "haiku",
         id: "claude-haiku-4-5",
         // No thinking tokens to leave room for, and a session is ~400 tokens.
         maxTokens: 8_000,
@@ -35,6 +39,7 @@ nonisolated struct ClaudeModel: Sendable {
 
     /// Kept for comparison. Better spoken-form rhythm; ~8x the price.
     static let opus = ClaudeModel(
+        name: "opus",
         id: "claude-opus-4-8",
         // Thinking tokens are billed as output and count against this.
         maxTokens: 16_000,
@@ -54,7 +59,7 @@ nonisolated struct ClaudeClient: Sendable {
         var errorDescription: String? {
             switch self {
             case .missingAPIKey:
-                "No Claude API key. Add ANTHROPIC_API_KEY to Secrets.xcconfig."
+                "Sign in to have the cornerman write you a session."
             case .http(let status, let message):
                 "Claude returned \(status): \(message)"
             case .refused(let why):
@@ -67,37 +72,43 @@ nonisolated struct ClaudeClient: Sendable {
         }
     }
 
-    private let apiKey: String
+    /// Hands back a live Supabase access token, or nil when there's no session.
+    ///
+    /// A closure rather than a stored token: this client outlives any single
+    /// token — they last about an hour — and asking at the moment of the call is
+    /// what lets `AuthController` refresh underneath without anyone here knowing.
+    private let token: @Sendable () async -> String?
     private let model: ClaudeModel
     private let urlSession: URLSession
     private let log = Logger(subsystem: "Giorgi.Corner", category: "claude")
 
-    private static let endpoint = URL(string: "https://api.anthropic.com/v1/messages")!
-    private static let apiVersion = "2023-06-01"
+    private static var endpoint: URL { Supabase.functionURL.appending(path: "session") }
 
-    init(apiKey: String, model: ClaudeModel = .haiku, urlSession: URLSession = .shared) {
-        self.apiKey = apiKey
+    init(
+        token: @escaping @Sendable () async -> String?,
+        model: ClaudeModel = .haiku,
+        urlSession: URLSession = .shared
+    ) {
+        self.token = token
         self.model = model
         self.urlSession = urlSession
     }
 
-    /// Reads the key that `Secrets.xcconfig` substituted into `Config/Info.plist`.
+    /// Talks to the Edge Function, which holds the Anthropic key.
     ///
-    /// This means the key ships inside the binary and can be extracted from the
-    /// `.ipa`. That's the accepted M3 trade — it must be replaced by a proxy
-    /// before this app is on anyone's phone but yours.
-    static func fromBundle(model: ClaudeModel = .haiku) throws -> ClaudeClient {
-        guard let key = Bundle.main.object(forInfoDictionaryKey: "ANTHROPIC_API_KEY") as? String,
-              key.hasPrefix("sk-ant-")
-        else {
-            throw Failure.missingAPIKey
-        }
-
+    /// The key used to ship inside the binary, read out of `Info.plist` — and an
+    /// `.ipa` is a zip, so anyone holding the app held the key and could spend
+    /// against it. Now the app carries nothing but the signed-in user's token,
+    /// which is worth nothing to anyone else and expires by itself.
+    static func viaProxy(
+        token: @escaping @Sendable () async -> String?,
+        model: ClaudeModel = .haiku
+    ) -> ClaudeClient {
         let configuration = URLSessionConfiguration.default
         configuration.timeoutIntervalForRequest = 120
         configuration.waitsForConnectivity = false
         return ClaudeClient(
-            apiKey: key,
+            token: token,
             model: model,
             urlSession: URLSession(configuration: configuration)
         )
@@ -112,27 +123,24 @@ nonisolated struct ClaudeClient: Sendable {
         schema: [String: Any],
         returning: T.Type = T.self
     ) async throws -> T {
-        var body: [String: Any] = [
-            "model": model.id,
-            "max_tokens": model.maxTokens,
-            // Guarantees the reply parses to `schema`, so JSONDecoder is enough.
-            "output_config": ["format": ["type": "json_schema", "schema": schema]],
+        // The model is named, not specified. `max_tokens`, the thinking mode and
+        // the Anthropic version live on the server, which is the point of having
+        // one: a patched app can't ask for a more expensive model or a token
+        // budget that turns one tap into a bill.
+        let body: [String: Any] = [
+            "model": model.name,
             "system": system,
-            "messages": [["role": "user", "content": user]],
+            "user": user,
+            "schema": schema,
         ]
 
-        // Only sent where it's supported — Haiku 4.5 rejects it. Note there is
-        // no `temperature` here either: it's a 400 on Opus 4.8, so the prompt is
-        // the only steering lever regardless of model.
-        if model.usesAdaptiveThinking {
-            body["thinking"] = ["type": "adaptive"]
-        }
+        guard let token = await token() else { throw Failure.missingAPIKey }
 
         var request = URLRequest(url: Self.endpoint)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "content-type")
-        request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
-        request.setValue(Self.apiVersion, forHTTPHeaderField: "anthropic-version")
+        request.setValue(Supabase.publishableKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "authorization")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let started = ContinuousClock.now

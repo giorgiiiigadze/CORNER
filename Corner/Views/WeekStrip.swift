@@ -75,17 +75,14 @@ struct WeekStrip: View {
                     .padding(.horizontal, 4)
                     .frame(width: Self.slot)
                     .background {
-                        if isSelected(day) {
-                            // The accent for a deliberate choice, the grey for
-                            // today — so a selected today still reads as chosen
-                            // rather than merely current.
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .fill(Theme.Palette.accent.opacity(0.22))
-                                .overlay {
-                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                        .strokeBorder(Theme.Palette.accent, lineWidth: 1.5)
-                                }
-                        } else if isToday(day) {
+                        // One highlight, the same grey, for both "today" and
+                        // "the day you're looking at". The accent was doing a
+                        // third job here — it already means the ring on a
+                        // trained day and the fill on the chart's bar, and a
+                        // container in the same red made the strip louder than
+                        // the numbers it's a control for. The ring inside still
+                        // tells today apart from any other selected day.
+                        if isSelected(day) || isToday(day) {
                             RoundedRectangle(cornerRadius: 16, style: .continuous)
                                 .fill(Color(.secondarySystemGroupedBackground))
                         }

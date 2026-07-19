@@ -105,6 +105,7 @@ final class SessionEngine {
     /// What happened, for the history. Read once the session is over.
     var summary: SessionSummary {
         SessionSummary(
+            sessionID: session.id,
             title: session.title,
             focuses: session.rounds.map(\.focus),
             roundsPlanned: session.rounds.count,

@@ -112,17 +112,15 @@ struct ContentView: View {
             guard current == .create else { return }
             page = previous == .create ? .home : previous
 
-            // One session a day. With today's still unfinished the button
-            // resumes it rather than writing over it, and with today's finished
-            // it says so instead of quietly doing nothing — a button that
-            // ignores you is worse than one that answers.
-            if unfinishedToday != nil {
-                resumeToday()
-            } else if todayPlan != nil {
-                problem = "Today's session is done. The next one is tomorrow."
-            } else {
-                showingSetup = true
-            }
+            // Always a new session. Train twice in a day if you want to — the
+            // cornerman's job is to write what you ask for, not to ration it.
+            //
+            // Picking up an unfinished session is still possible and is the
+            // Resume row's job. Two controls, two meanings: this one writes,
+            // that one continues. It used to be one button guessing between
+            // them, which meant a fighter who wanted a second session got given
+            // the first one back.
+            showingSetup = true
         }
         // All four tabs, all the time. The iOS 26 minimize gesture collapses the
         // bar to the selected tab alone as you scroll, which reads as the other
@@ -130,7 +128,13 @@ struct ContentView: View {
         // destinations wide. Trading that legibility for a few points of list
         // height isn't worth it here.
         .tabBarMinimizeBehavior(.never)
-        .tint(Theme.Palette.accent)
+        // White for the selected tab, not the brand red.
+        //
+        // The accent had four jobs on this screen — the trained ring, the
+        // highlighted bar, the streak flame, the session button — and a fifth
+        // spent on "which tab am I looking at" made none of them mean anything
+        // in particular. Ink for navigation, red for the training.
+        .tint(.white)
         // The chrome is dark; the live timer pins itself back to light, because a
         // pale screen across a gym is the one thing that screen is for.
         .preferredColorScheme(.dark)
@@ -138,6 +142,10 @@ struct ContentView: View {
             SessionSetupSheet(request: $request) {
                 Task { await generate() }
             }
+            // Tint is inherited, and the bar's is now white — which would leave
+            // the sheet's "Write it" white on white. The accent belongs here:
+            // this is the action that starts training.
+            .tint(Theme.Palette.accent)
         }
         .fullScreenCover(item: $live) { engine in
             LiveSessionView(engine: engine) { summary in
@@ -223,20 +231,35 @@ struct ContentView: View {
         plans.first { Calendar.current.isDateInToday($0.generatedAt) }
     }
 
-    /// Rounds finished today, across however many sittings it took.
-    private var roundsDoneToday: Int {
+    /// Rounds finished against one plan, across however many sittings it took.
+    ///
+    /// Per plan, not per day. Counting the day's total was right while a day
+    /// held one session and wrong the moment it could hold two: finishing an
+    /// eight-round session and then starting a six-round one left the day's
+    /// count already past the second plan's total, so a session you'd barely
+    /// begun reported itself complete and the Resume row never appeared.
+    private func roundsDone(against plan: TodaySession) -> Int {
         history
-            .filter { Calendar.current.isDateInToday($0.date) }
+            .filter { $0.sessionID == plan.sessionID }
             .reduce(0) { $0 + $1.roundsCompleted }
     }
 
-    /// What's left of today, or nil when today is done or was never started.
+    /// What's left of the latest plan, or nil when it's finished or was never
+    /// started.
     ///
-    /// Nil rather than zero on a finished day: "nothing left" and "no session"
-    /// are different states and the Home screen shows different things for them.
+    /// Nil rather than zero on a finished session: "nothing left" and "nothing
+    /// started" are different states and Home shows different things for them.
     private var unfinishedToday: (plan: TodaySession, done: Int)? {
-        guard let plan = todayPlan, roundsDoneToday < plan.roundCount else { return nil }
-        return (plan, roundsDoneToday)
+        guard let plan = todayPlan else { return nil }
+
+        // An empty id can't be matched to any record, so it would always read as
+        // untouched and offer to resume a session already trained. Plans written
+        // before sessions were linked are the only ones like this.
+        guard !plan.sessionID.isEmpty else { return nil }
+
+        let done = roundsDone(against: plan)
+        guard done < plan.roundCount else { return nil }
+        return (plan, done)
     }
 
     /// Picks up where the session stopped.
@@ -435,6 +458,16 @@ struct ContentView: View {
 
         }
         .scrollContentBackground(.hidden)
+        // The iOS 26 scroll-edge effect, on the top edge only. Content was
+        // passing under the status bar with nothing between them — the clock and
+        // the battery sitting directly on a moving dashboard, which is what made
+        // scrolling look wrong.
+        //
+        // `.soft` rather than `.hard`: soft fades the blur out over a short
+        // distance, hard draws a defined edge. There's no navigation bar here to
+        // draw an edge under — Home's title is its own masthead — so a line
+        // would be a border around nothing.
+        .scrollEdgeEffectStyle(.soft, for: .top)
         // The calendar inside the masthead already hides its own indicator; this
         // is the page's. A bar tracking down the edge of a screen this short is
         // chrome that reports something the content already makes obvious.
@@ -455,7 +488,7 @@ struct ContentView: View {
         var request = self.request
         request.profile = profile
 
-        let generator = SessionGenerator(client: try? ClaudeClient.fromBundle())
+        let generator = SessionGenerator(client: ClaudeClient.viaProxy(token: { [auth] in await auth.token() }))
         let session = await generator.plan(request)
         planned = session
 
@@ -527,7 +560,12 @@ struct ContentView: View {
         // the on-device one is also ElevenLabs' fallback if the network dies
         // mid-session.
         let native = Cornerman()
-        let voice: any Voice = ElevenLabsVoice.fromBundle(fallback: native) ?? native
+        // The token closure is the whole seam: the voice never sees a vendor
+        // key, only proof that someone is signed in.
+        let voice: any Voice = ElevenLabsVoice.viaProxy(
+            fallback: native,
+            token: { [auth] in await auth.token() }
+        )
 
         live = SessionEngine(
             session: session,
@@ -535,7 +573,7 @@ struct ContentView: View {
             recognizer: SpeechAnalyzerRecognizer(),
             // Same key as the session writer, and the same shrug when there
             // isn't one: no key means the phrase list, which still works.
-            intent: CommandInterpreter(client: try? ClaudeClient.fromBundle())
+            intent: CommandInterpreter(client: ClaudeClient.viaProxy(token: { [auth] in await auth.token() }))
         )
     }
 

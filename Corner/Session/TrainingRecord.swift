@@ -21,6 +21,12 @@ final class TrainingRecord {
     /// offline, and for everything recorded before sync existed.
     var isSynced: Bool = false
 
+    /// The plan this session belongs to, matching `TodaySession.sessionID`.
+    /// Empty on anything recorded before sessions were linked, and on records
+    /// pulled from another device — neither can be resumed here, which is
+    /// correct: a sitting is resumed on the phone that started it.
+    var sessionID: String = ""
+
     /// Whose session this was.
     ///
     /// Empty means it predates accounts. Those are claimed by the first user to
@@ -56,6 +62,7 @@ final class TrainingRecord {
 
     init(
         remoteID: UUID = UUID(),
+        sessionID: String = "",
         userID: String = "",
         date: Date = .now,
         title: String,
@@ -67,6 +74,7 @@ final class TrainingRecord {
         pauseCount: Int? = nil
     ) {
         self.remoteID = remoteID
+        self.sessionID = sessionID
         self.userID = userID
         self.date = date
         self.title = title
@@ -80,6 +88,7 @@ final class TrainingRecord {
 
     convenience init(summary: SessionSummary, userID: String, date: Date = .now) {
         self.init(
+            sessionID: summary.sessionID,
             userID: userID,
             date: date,
             title: summary.title,
@@ -96,6 +105,13 @@ final class TrainingRecord {
 /// What the engine observed. Kept separate from `TrainingRecord` so the engine
 /// never touches SwiftData and stays testable without a store.
 nonisolated struct SessionSummary: Sendable, Equatable {
+    /// Which plan this was a sitting of.
+    ///
+    /// Carried so two sessions on the same day can be told apart. Counting
+    /// rounds per *day* was fine while a day held one session; it stopped being
+    /// fine the moment a fighter could train twice, because the second
+    /// session's progress was measured against the first one's work.
+    var sessionID: String = ""
     var title: String
     var focuses: [String]
     var roundsPlanned: Int
