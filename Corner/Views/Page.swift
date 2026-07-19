@@ -26,6 +26,18 @@ enum Page: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Whether the navigation bar names the screen.
+    ///
+    /// False where the screen already introduces itself: Home's toolbar is its
+    /// header, and Profile opens on a face and a name. A large title above
+    /// either is the same word twice.
+    var showsLargeTitle: Bool {
+        switch self {
+        case .home, .profile, .create: false
+        case .coach, .history: true
+        }
+    }
+
     var icon: String {
         switch self {
         case .home: "house.fill"

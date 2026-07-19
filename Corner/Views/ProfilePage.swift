@@ -29,7 +29,6 @@ struct ProfilePage: View {
                 identity
                 totals
                 backup
-                settingsLink
             }
             .padding(.horizontal, 16)
             .padding(.top, 12)
@@ -37,6 +36,7 @@ struct ProfilePage: View {
         }
         .scrollIndicators(.hidden)
         .background(Theme.Palette.background)
+        .toolbar { bar }
     }
 
     // MARK: - Identity
@@ -80,15 +80,17 @@ struct ProfilePage: View {
             divider
             total("\(stats.minutesTotal)", "Minutes")
         }
-        .padding(.vertical, 18)
+        // No card behind it. The numbers are the loudest thing on the page and a
+        // panel around them competes for the same job — on the reference the
+        // three sit straight on the background with hairlines between, and
+        // that's why they read as one line rather than as a widget.
         .frame(maxWidth: .infinity)
-        .background(Theme.Palette.surface, in: .rect(cornerRadius: 18))
     }
 
     private func total(_ value: String, _ label: String) -> some View {
         VStack(spacing: 4) {
             Text(value)
-                .font(.system(size: 26, weight: .bold, design: .rounded))
+                .font(.system(size: 22, weight: .bold))
                 .foregroundStyle(.primary)
                 .contentTransition(.numericText())
 
@@ -103,7 +105,7 @@ struct ProfilePage: View {
     private var divider: some View {
         Rectangle()
             .fill(Color(.separator))
-            .frame(width: 1, height: 28)
+            .frame(width: 1, height: 24)
     }
 
     // MARK: - Backup
@@ -156,30 +158,25 @@ struct ProfilePage: View {
         .background(Theme.Palette.surface, in: .rect(cornerRadius: 18))
     }
 
-    // MARK: - Settings
+    // MARK: - Bar
 
-    private var settingsLink: some View {
-        NavigationLink {
-            SettingsView()
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: "gearshape.fill")
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-
+    /// The wide button in the header, where the reference has "Edit".
+    ///
+    /// Settings rather than an edit screen, because there's nothing to edit yet
+    /// — `display_name` is waiting in the profiles table and the moment it's
+    /// wired this is the button that opens it.
+    @ToolbarContentBuilder
+    private var bar: some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            NavigationLink {
+                SettingsView()
+            } label: {
                 Text("Settings")
-                    .font(.body.weight(.medium))
-                    .foregroundStyle(.primary)
-
-                Spacer()
-
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.tertiary)
+                    // Padding widens the capsule; the bar still owns the height
+                    // and the material. A frame here is what made the first
+                    // toolbar attempt look like nothing else on the phone.
+                    .padding(.horizontal, 8)
             }
-            .padding(16)
-            .background(Theme.Palette.surface, in: .rect(cornerRadius: 18))
         }
-        .buttonStyle(.plain)
     }
 }

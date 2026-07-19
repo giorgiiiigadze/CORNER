@@ -189,17 +189,17 @@ struct ContentView: View {
     /// own bar, and now it's where iOS puts it — collapsing into the nav bar as
     /// you scroll, without us animating anything.
     ///
-    /// Home is the exception. It carries a branded header of its own — mark and
-    /// wordmark on the left, streak on the right — and a large "Home" sitting
-    /// above that would be two titles stacked, naming the same screen twice.
+    /// Home and Profile are the exceptions. Home's title is its toolbar; the
+    /// Profile page opens with an avatar and a name, and a large "Profile"
+    /// above that names the screen twice while pushing the face off the fold.
     private func destination<Content: View>(
         _ page: Page,
         @ViewBuilder content: () -> Content
     ) -> some View {
         NavigationStack {
             content()
-                .navigationTitle(page == .home ? "" : page.title)
-                .navigationBarTitleDisplayMode(page == .home ? .inline : .large)
+                .navigationTitle(page.showsLargeTitle ? page.title : "")
+                .navigationBarTitleDisplayMode(page.showsLargeTitle ? .large : .inline)
                 .background(Theme.Palette.background)
         }
     }
