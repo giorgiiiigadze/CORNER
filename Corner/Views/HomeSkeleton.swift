@@ -24,9 +24,7 @@ struct HomeSkeleton: View {
         // one: 26 under the masthead, 8 between the dashboard's own cards, 20
         // before Recent sessions. A single value made the tiles sit ~18pt low.
         VStack(alignment: .leading, spacing: 0) {
-            masthead
             week
-                .padding(.top, 26)
             hero
                 .padding(.top, 20)
             tiles
@@ -36,14 +34,11 @@ struct HomeSkeleton: View {
             Spacer()
         }
         .padding(.horizontal, 16)
-        // Measured, not guessed, and this is the honest version of the comment:
-        // Home's masthead sits inside a `NavigationStack` and a `List`, and the
-        // inset those add came to 37pt on an iPhone 17 simulator. Reproducing
-        // the containers here didn't reproduce the inset — a plain list styles
-        // differently from the grouped one Home uses — so the number is taken
-        // from the screen rather than derived. It's a nav bar's worth of space
-        // and shouldn't move between devices, but it's a constant to re-check
-        // if the masthead ever looks like it jumps on load.
+        // Measured against the real screen rather than derived. Home's content
+        // sits inside a `NavigationStack` and a `List`, and the inset those add
+        // came to 37pt on an iPhone 17 — reproducing the containers here didn't
+        // reproduce the inset, so the number is taken from the screen. Re-check
+        // it if the calendar ever looks like it jumps on load.
         .padding(.top, 37)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.Palette.background)
@@ -57,16 +52,6 @@ struct HomeSkeleton: View {
     }
 
     // MARK: - Pieces
-
-    private var masthead: some View {
-        HStack(spacing: 10) {
-            block(width: 34, height: 34, corner: 9)
-            block(width: 120, height: 26, corner: 8)
-            Spacer(minLength: 8)
-            block(width: 72, height: 34, corner: 17)
-        }
-        .padding(.horizontal, 4)
-    }
 
     private var week: some View {
         HStack(spacing: 0) {

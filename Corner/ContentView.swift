@@ -345,73 +345,66 @@ struct ContentView: View {
         }
     }
 
-    /// The masthead: who the app is, and the one number that says whether you're
-    /// keeping at it.
+    /// The two glass controls in Home's navigation bar.
     ///
-    /// The streak rather than any of the other four stats, and on the header
-    /// rather than only in the grid below, because it's the number that changes
-    /// how you feel about opening the app — the total minutes are a record, the
-    /// streak is a stake.
-    private var header: some View {
-        HStack(spacing: 10) {
-            // Placeholder mark. A rounded square at icon proportions so the real
-            // artwork can drop straight in without the row reflowing around it.
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .fill(Theme.Palette.accentLight)
-                .frame(width: 34, height: 34)
-                .overlay {
-                    Image(systemName: "figure.boxing")
-                        .font(.system(size: 18, weight: .bold))
+    /// Toolbar items rather than a row drawn in the content: iOS 26 gives these
+    /// Liquid Glass, the scroll-edge behaviour and the hit targets for free, and
+    /// the hand-built masthead they replace had none of it — it was a logo and a
+    /// pill scrolling away with the dashboard like any other content.
+    @ToolbarContentBuilder
+    private var homeBar: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            Button {
+                // Nothing yet. Reminders are the obvious home for this — "you
+                // haven't trained since Tuesday" — and the bell is here because
+                // the layout was asked for, not because that exists.
+            } label: {
+                Image(systemName: "bell.fill")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: Self.barItemWidth, height: 30)
+            }
+            .buttonStyle(.glass)
+            .accessibilityLabel("Reminders")
+        }
+
+        ToolbarItem(placement: .topBarTrailing) {
+            Button {
+                // The streak is a readout, not a control. It's a button only so
+                // it gets the same glass and the same metrics as the bell —
+                // a plain label in a toolbar sits at a different size and the
+                // pair stops looking like a pair.
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "flame.fill")
+                        .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(.white)
+
+                    Text("\(TrainingStats.from(history: history).streak)")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .contentTransition(.numericText())
                 }
-
-            Text("Corner")
-                .font(.title.weight(.bold))
-                .foregroundStyle(.primary)
-
-            Spacer(minLength: 8)
-
-            streakPill
+                .frame(width: Self.barItemWidth, height: 30)
+            }
+            .buttonStyle(.glass)
+            .accessibilityLabel("Training streak")
         }
-        .padding(.horizontal, 4)
     }
 
-    /// The masthead and the calendar under it, as one block.
+    /// Both the same, so the two read as a pair rather than as one control and
+    /// one badge that happen to share a bar.
+    private static let barItemWidth: CGFloat = 52
+
+    /// The calendar, full width.
     ///
-    /// The strip is deliberately not inset with the header: it scrolls, and a
-    /// scrolling row that stops short of the screen edge reads as clipped rather
-    /// than as continuing. The header keeps its margin, the strip runs full
-    /// width, and the negative inset undoes the padding they'd otherwise share.
+    /// Not inset with the rest of the screen: it scrolls, and a scrolling row
+    /// that stops short of the edge reads as clipped rather than as continuing.
+    /// The negative inset undoes the margin the section would otherwise apply.
     private var masthead: some View {
-        VStack(alignment: .leading, spacing: 26) {
-            header
-
-            WeekStrip(progress: dayProgress, selection: $selectedDay)
-                .padding(.horizontal, -16)
-        }
-        .padding(.bottom, 10)
-    }
-
-    private var streakPill: some View {
-        let streak = TrainingStats.from(history: history).streak
-        return HStack(spacing: 5) {
-            Image(systemName: "flame.fill")
-                // The flame carries the accent whether or not the streak is
-                // alive: a grey flame next to a zero reads as a broken feature
-                // rather than as a streak waiting to start.
-                .foregroundStyle(Theme.Palette.accentLight)
-                .font(.system(size: 14, weight: .bold))
-
-            Text("\(streak)")
-                .font(.subheadline.weight(.bold))
-                .foregroundStyle(.primary)
-                .contentTransition(.numericText())
-        }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 7)
-        .background(Theme.Palette.surface, in: .capsule)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(streak == 1 ? "1 day streak" : "\(streak) day streak")
+        WeekStrip(progress: dayProgress, selection: $selectedDay)
+            .padding(.horizontal, -16)
+            .padding(.bottom, 10)
     }
 
     // MARK: - Home
@@ -462,6 +455,7 @@ struct ContentView: View {
             .listSectionMargins(.horizontal, 16)
 
         }
+        .toolbar { homeBar }
         .scrollContentBackground(.hidden)
         // The iOS 26 scroll-edge effect, on the top edge only. Content was
         // passing under the status bar with nothing between them — the clock and
