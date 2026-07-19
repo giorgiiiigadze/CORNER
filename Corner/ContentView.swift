@@ -440,7 +440,12 @@ struct ContentView: View {
             // train, not the way — a screen that leads with last week's numbers
             // asks you to read before it lets you work.
             Section {
-                VStack(spacing: 20) {
+                // Wider than the 8pt inside the dashboard, and deliberately so:
+                // that gap holds a grid together, this one separates two
+                // different subjects — what the numbers say, and what you
+                // actually did. Same spacing for both would read as one long
+                // list of cards.
+                VStack(spacing: 30) {
                     SummaryCards(stats: TrainingStats.from(history: history), day: selectedDayStats)
                     RecentSessions(
                         history: history,
