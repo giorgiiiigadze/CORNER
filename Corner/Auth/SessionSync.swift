@@ -41,11 +41,29 @@ struct SessionSync {
     /// nothing to send for those. The other way round, a device that had
     /// claimed legacy records would re-upload rows it was about to receive.
     func run() async {
+        // One at a time. Startup and "session just finished" both call this, and
+        // they overlap: a workout that ends while the launch sync is still in
+        // flight had both passes reading `!isSynced` before either wrote it, so
+        // the same record went up twice and two saves raced on the same objects.
+        // The upsert made the server side harmless; the local double-write was
+        // the part worth closing.
+        guard !Self.isRunning else { return }
+        Self.isRunning = true
+        defer { Self.isRunning = false }
+
         guard let token = await auth.token(), let userID = auth.userID else { return }
 
         await pull(token: token, userID: userID)
         await push(token: token, userID: userID)
     }
+
+    /// Static because `SessionSync` is a struct built fresh at each call site —
+    /// an instance flag would guard nothing.
+    ///
+    /// Safe as shared mutable state only because the type is `@MainActor`: every
+    /// read and write of this happens on the main actor, and the `await`s above
+    /// suspend rather than hand it to another thread.
+    @MainActor private static var isRunning = false
 
     // MARK: - Down
 
@@ -65,14 +83,25 @@ struct SessionSync {
             }
 
             let rows = try Self.decoder.decode([Row].self, from: data)
-            let known = Set(localRecords().map(\.remoteID))
 
+            // Every id on the device, not just this user's. Scoped to the
+            // signed-in user, a row already stored under another owner reads as
+            // unknown and gets inserted a second time — `remoteID` names a
+            // session globally, so the check has to be global too.
+            let known = Set(allLocalIDs())
+
+            var inserted = 0
             for row in rows where !known.contains(row.id) {
                 context.insert(row.record(userID: userID))
+                inserted += 1
             }
 
             try? context.save()
-            log.info("Pulled \(rows.count) sessions, \(rows.count - known.count) new")
+            // Counted, not inferred. `rows.count - known.count` subtracted a
+            // local total from a remote one and printed nonsense — usually
+            // negative — which made the one diagnostic for "sync ran and stored
+            // nothing" useless.
+            log.info("Pulled \(rows.count) sessions, \(inserted) new")
         } catch {
             log.error("Pull failed: \(error.localizedDescription, privacy: .public)")
         }
@@ -117,12 +146,23 @@ struct SessionSync {
 
     // MARK: - Local
 
+    /// This user's records — what gets uploaded.
     private func localRecords() -> [TrainingRecord] {
         let userID = auth.userID ?? ""
         let descriptor = FetchDescriptor<TrainingRecord>(
             predicate: #Predicate { $0.userID == userID }
         )
         return (try? context.fetch(descriptor)) ?? []
+    }
+
+    /// Every id on the device, whoever owns it — what the pull checks against.
+    ///
+    /// Unfiltered on purpose. These ids are unique across accounts and devices,
+    /// so "do we already have this session" is a question about the store, not
+    /// about the signed-in user.
+    private func allLocalIDs() -> [UUID] {
+        let descriptor = FetchDescriptor<TrainingRecord>()
+        return ((try? context.fetch(descriptor)) ?? []).map(\.remoteID)
     }
 
     // MARK: - Wire format

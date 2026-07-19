@@ -25,10 +25,7 @@ struct CornerApp: App {
             Group {
                 switch auth.state {
                 case .restoring:
-                    ProgressView()
-                        .controlSize(.large)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(Theme.Palette.background)
+                    HomeSkeleton()
 
                 case .signedOut:
                     SignInView(auth: auth)

@@ -17,11 +17,11 @@ import SwiftData
 @Model
 final class TodaySession {
 
-    /// Matches the underlying `Session.id`, so a stored card and the plan it
-    /// came from can always be reconciled.
     /// Whose plan this is. See `TrainingRecord.userID` — same rule, same reason.
     var userID: String = ""
 
+    /// Matches the underlying `Session.id`, so a stored card and the plan it
+    /// came from can always be reconciled.
     var sessionID: String = ""
 
     /// Two or three words — what today is for. The card's headline.

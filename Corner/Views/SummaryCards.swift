@@ -24,6 +24,26 @@ struct SummaryCards: View {
 
     let stats: TrainingStats
 
+    /// One day's numbers, when a day is picked out of the calendar above.
+    ///
+    /// Nil is the normal state and means the running totals. A separate value
+    /// rather than a filtered `TrainingStats`, because the two answer different
+    /// questions: the totals are what you've built, a day is what you did.
+    var day: Day?
+
+    struct Day: Equatable {
+        let date: Date
+        let minutes: Int
+        let rounds: Int
+        let sessions: Int
+    }
+
+    /// "Sun 19 Jul" — long enough to be unambiguous when you've scrolled back
+    /// two months, short enough for a caption.
+    private var dayCaption: String {
+        day.map { $0.date.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)) } ?? ""
+    }
+
     /// 8, not 12 — the tiles read as one block this way rather than as cards
     /// drifting apart. The column spacing and the two stack spacings below are
     /// the same number on purpose: the gap between two tiles side by side and
@@ -71,21 +91,21 @@ struct SummaryCards: View {
         // breathing between rounds is not a minute on the bag.
         Card(
             title: "Minutes worked",
-            caption: "All time",
+            caption: day == nil ? "All time" : dayCaption,
             titleFont: .title3.weight(.semibold),
             showsChevron: false
         ) {
-            Text("\(stats.minutesTotal)")
+            Text("\(day?.minutes ?? stats.minutesTotal)")
                 .font(.system(size: 44, weight: .heavy, design: .rounded))
                 .foregroundStyle(.primary)
                 .contentTransition(.numericText())
 
-            Chart(stats.week) { day in
+            Chart(stats.week) { entry in
                 BarMark(
-                    x: .value("Day", day.date, unit: .day),
-                    y: .value("Minutes", day.minutes)
+                    x: .value("Day", entry.date, unit: .day),
+                    y: .value("Minutes", entry.minutes)
                 )
-                .foregroundStyle(isToday(day.date) ? Theme.Palette.accent : Color(.quaternaryLabel))
+                .foregroundStyle(isHighlighted(entry.date) ? Theme.Palette.accent : Color(.quaternaryLabel))
                 .cornerRadius(3)
             }
             .chartYAxis(.hidden)
@@ -97,12 +117,18 @@ struct SummaryCards: View {
                 }
             }
             .frame(height: 68)
+            // The accent moving between bars must not be animated. Picking a day
+            // is wrapped in `withAnimation` so the numbers roll, and Charts
+            // inherits that — which re-interpolated every bar and read as the
+            // columns swapping places and swapping back. The highlight is a
+            // state, not a movement: it should just be somewhere else.
+            .transaction { $0.animation = nil }
         }
     }
 
     private var rounds: some View {
-        Card(title: "Rounds", caption: "This week") {
-            Big("\(stats.roundsThisWeek)")
+        Card(title: "Rounds", caption: day == nil ? "This week" : dayCaption) {
+            Big("\(day?.rounds ?? stats.roundsThisWeek)")
 
             // The sparkline sits on the floor of the tile, not directly under
             // the number. This is the Fitness construction and the reason it
@@ -113,12 +139,12 @@ struct SummaryCards: View {
             // only this one and the hero have a chart to float.
             Spacer(minLength: 8)
 
-            Chart(stats.week) { day in
+            Chart(stats.week) { entry in
                 BarMark(
-                    x: .value("Day", day.date, unit: .day),
-                    y: .value("Rounds", day.rounds)
+                    x: .value("Day", entry.date, unit: .day),
+                    y: .value("Rounds", entry.rounds)
                 )
-                .foregroundStyle(isToday(day.date) ? Theme.Palette.accent : Color(.quaternaryLabel))
+                .foregroundStyle(isHighlighted(entry.date) ? Theme.Palette.accent : Color(.quaternaryLabel))
                 .cornerRadius(2)
             }
             .chartYAxis(.hidden)
@@ -136,6 +162,8 @@ struct SummaryCards: View {
             // follows the device width, so a hardcoded 34pt was a different
             // proportion of the card on every phone.
             .frame(maxHeight: .infinity)
+            // Same as the hero: the highlight jumps, it doesn't travel.
+            .transaction { $0.animation = nil }
         }
     }
 
@@ -143,18 +171,24 @@ struct SummaryCards: View {
     /// what you've built and the week is whether you're still building it — the
     /// same two-part answer the hero gives, at tile scale.
     private var sessions: some View {
-        Card(title: "Sessions", caption: lastTrainedText) {
-            Big("\(stats.totalSessions)")
+        Card(title: "Sessions", caption: day == nil ? lastTrainedText : dayCaption) {
+            Big("\(day?.sessions ?? stats.totalSessions)")
             Spacer(minLength: 8)
-            Footnote(
-                stats.sessionsThisWeek == 0
-                    ? "None this week"
-                    : "\(stats.sessionsThisWeek) this week"
-            )
+            Footnote(footnote)
         }
     }
 
     // MARK: - Derived
+
+    /// Under the session count: this week's tally normally, and on a picked day
+    /// the plain fact of whether anything happened — "0" with no line under it
+    /// reads as a number still loading.
+    private var footnote: String {
+        if let day {
+            return day.sessions == 0 ? "Rest day" : "on this day"
+        }
+        return stats.sessionsThisWeek == 0 ? "None this week" : "\(stats.sessionsThisWeek) this week"
+    }
 
     private var lastTrainedText: String {
         guard let last = stats.lastTrained else { return "None yet" }
@@ -163,6 +197,21 @@ struct SummaryCards: View {
 
     private func isToday(_ date: Date) -> Bool {
         Calendar.current.isDateInToday(date)
+    }
+
+    /// Which bar wears the accent.
+    ///
+    /// The picked day when there is one, today otherwise. One bar at a time on
+    /// purpose: the accent here means "this is the column the numbers above are
+    /// describing", and two of them would leave the reader to guess which.
+    ///
+    /// A day picked from further back than the last seven has no bar in this
+    /// chart to light up. The cards still show its numbers, and the chart keeps
+    /// showing the week — it's the running context, not a second copy of the
+    /// selection.
+    private func isHighlighted(_ date: Date) -> Bool {
+        guard let day else { return isToday(date) }
+        return Calendar.current.isDate(day.date, inSameDayAs: date)
     }
 }
 
@@ -204,6 +253,10 @@ private struct Card<Content: View>: View {
             Text(caption)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                // The caption swaps between "All time" and a date. A digit roll
+                // is wrong for words; a cross-fade is what the system does for
+                // changing text.
+                .contentTransition(.opacity)
 
             content
         }
@@ -250,6 +303,7 @@ private struct Footnote: View {
             .foregroundStyle(.secondary)
             .lineLimit(1)
             .minimumScaleFactor(0.8)
+            .contentTransition(.opacity)
     }
 }
 

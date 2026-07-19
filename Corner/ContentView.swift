@@ -50,6 +50,9 @@ struct ContentView: View {
     @State private var showingSetup = false
     @State private var request = SessionRequest()
 
+    /// The day the dashboard is showing, or nil for running totals.
+    @State private var selectedDay: Date?
+
     @Environment(AuthController.self) private var auth
 
     private let audioSession = AudioSessionController()
@@ -154,7 +157,13 @@ struct ContentView: View {
         .onChange(of: live == nil) { _, gone in
             if gone { audioSession.deactivate() }
         }
-        .task {
+        // Keyed on the id rather than fired once on appear. `userID` arrives
+        // from a network round-trip, and this view can be built in a frame where
+        // it's still empty — a bare `.task` would then claim nothing, and since
+        // the queries above hide unowned records, every session ever trained
+        // would look deleted. Re-running when the id lands fixes that, and the
+        // empty guard inside means the early pass costs nothing.
+        .task(id: userID) {
             claimLegacyRecords()
             // Claim first, then sync: a legacy record with no owner would
             // otherwise be pushed under an empty user id, which RLS rejects.
@@ -257,6 +266,29 @@ struct ContentView: View {
         }
     }
 
+    /// The picked day's numbers, gathered from the same history the dashboard
+    /// already reads. Nil when nothing is picked, which is what puts the cards
+    /// back on the running totals.
+    ///
+    /// Built even for a day with no sessions: "0 rounds, rest day" is an answer,
+    /// and falling back to the totals would silently ignore the tap.
+    private var selectedDayStats: SummaryCards.Day? {
+        guard let selectedDay else { return nil }
+
+        let calendar = Calendar.current
+        let onThatDay = history.filter { calendar.isDate($0.date, inSameDayAs: selectedDay) }
+
+        return SummaryCards.Day(
+            date: selectedDay,
+            // Floored, and summed in seconds first — the same arithmetic
+            // `TrainingStats` uses, so a day's figure can't disagree with the
+            // total it contributes to.
+            minutes: onThatDay.reduce(0) { $0 + ($1.sessionSeconds ?? 0) } / 60,
+            rounds: onThatDay.reduce(0) { $0 + $1.roundsCompleted },
+            sessions: onThatDay.count
+        )
+    }
+
     /// How much of each day's planned work got finished, 0 to 1.
     ///
     /// Summed across the day rather than averaged per session: two sessions of
@@ -326,10 +358,9 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 26) {
             header
 
-            WeekStrip(progress: dayProgress)
+            WeekStrip(progress: dayProgress, selection: $selectedDay)
                 .padding(.horizontal, -16)
         }
-        .padding(.top, 8)
         .padding(.bottom, 10)
     }
 
@@ -384,7 +415,7 @@ struct ContentView: View {
             // asks you to read before it lets you work.
             Section {
                 VStack(spacing: 20) {
-                    SummaryCards(stats: TrainingStats.from(history: history))
+                    SummaryCards(stats: TrainingStats.from(history: history), day: selectedDayStats)
                     RecentSessions(
                         history: history,
                         unfinished: unfinishedToday.map {

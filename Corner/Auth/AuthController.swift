@@ -83,7 +83,13 @@ final class AuthController {
         }
 
         guard let refresh = TokenStore.read() else { return nil }
-        try? await send(path: "token?grant_type=refresh_token", body: ["refresh_token": refresh])
+
+        // Discarded deliberately, and `accessToken` is read below instead: a
+        // refresh that fails leaves it nil, and returning nil is exactly right —
+        // the caller falls back to the offline path rather than sending a token
+        // it knows is dead. `@discardableResult` doesn't cover the `Optional`
+        // that `try?` wraps around it, hence the explicit `_`.
+        _ = try? await send(path: "token?grant_type=refresh_token", body: ["refresh_token": refresh])
         return accessToken
     }
 
@@ -129,16 +135,20 @@ final class AuthController {
         defer { isWorking = false }
 
         do {
-            try await send(path: path, body: ["email": email, "password": password])
+            // Answered by *this* response, not by reading `accessToken` back
+            // afterwards. That field survives across calls, so a stale token
+            // from an earlier sign-in could make a sign-up that's still waiting
+            // on an email confirmation look like a completed one — and drop the
+            // fighter into an app whose every request 401s.
+            let started = try await send(path: path, body: ["email": email, "password": password])
 
             // Signing up with email confirmation on returns a user but no
             // session — the account exists and is waiting on a click in an
-            // inbox. Treating that as success would drop them into an app that
-            // 401s on every request.
-            if accessToken == nil {
-                notice = "Check your email to confirm the account, then sign in."
-            } else {
+            // inbox.
+            if started {
                 state = .signedIn
+            } else {
+                notice = "Check your email to confirm the account, then sign in."
             }
         } catch let failure as Failure {
             problem = failure.message
@@ -154,7 +164,11 @@ final class AuthController {
     /// Every auth endpoint answers with the same session shape, so they share
     /// this. `access_token` is optional because the sign-up-pending-confirmation
     /// case legitimately has none.
-    private func send(path: String, body: [String: String]) async throws {
+    ///
+    /// Returns whether *this* response carried a session. Callers must not infer
+    /// it from `accessToken` afterwards: that field outlives a single call.
+    @discardableResult
+    private func send(path: String, body: [String: String]) async throws -> Bool {
         guard let url = URL(string: Supabase.authURL.absoluteString + "/" + path) else {
             throw URLError(.badURL)
         }
@@ -177,14 +191,16 @@ final class AuthController {
         email = session.user?.email ?? email
         userID = session.user?.id ?? userID
 
-        if let token = session.access_token, let refresh = session.refresh_token {
-            accessToken = token
-            expiry = Date(timeIntervalSinceNow: TimeInterval(session.expires_in ?? 3_600))
-            TokenStore.save(refresh)
-        } else {
+        guard let token = session.access_token, let refresh = session.refresh_token else {
             accessToken = nil
             expiry = nil
+            return false
         }
+
+        accessToken = token
+        expiry = Date(timeIntervalSinceNow: TimeInterval(session.expires_in ?? 3_600))
+        TokenStore.save(refresh)
+        return true
     }
 
     /// Supabase's own wording where it has any, because it's better than

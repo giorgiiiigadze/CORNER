@@ -22,6 +22,13 @@ struct WeekStrip: View {
     /// circles.
     let progress: [Date: Double]
 
+    /// The day the dashboard below is showing, or nil for the running totals.
+    ///
+    /// A binding rather than a callback because the strip both sets and reflects
+    /// it: the highlight is the same fact the dashboard is reading, and two
+    /// copies of one fact drift.
+    @Binding var selection: Date?
+
     /// How far back you can scroll. Twelve weeks is a season of training, and
     /// far enough that the strip stops being a week and starts being a record.
     private static let weeksBack = 12
@@ -37,10 +44,22 @@ struct WeekStrip: View {
         ScrollView(.horizontal) {
             LazyHStack(spacing: 0) {
                 ForEach(days, id: \.self) { day in
+                    Button {
+                        // Tapping the selected day clears it. There's no other
+                        // way back to the running totals, and a control that can
+                        // only ever be turned on is a trap.
+                        // Animated here, at the source. `contentTransition`
+                        // only rolls digits when the value that feeds them
+                        // changes inside an animation — set outside one, the
+                        // dashboard snapped between numbers instead.
+                        withAnimation(.snappy(duration: 0.28)) {
+                            selection = isSelected(day) ? nil : calendar.startOfDay(for: day)
+                        }
+                    } label: {
                     VStack(spacing: 6) {
                         Text(day, format: .dateTime.weekday(.abbreviated))
                             .font(.caption2.weight(.medium))
-                            .foregroundStyle(isToday(day) ? .primary : .secondary)
+                            .foregroundStyle(isToday(day) || isSelected(day) ? .primary : .secondary)
 
                         Text(day, format: .dateTime.day())
                             .font(.subheadline.weight(isToday(day) ? .bold : .regular))
@@ -52,18 +71,36 @@ struct WeekStrip: View {
                     // reserves the room the highlight sits in. Applied only to
                     // the current day, the row would shift sideways each time
                     // the date rolled over.
-                    .padding(.vertical, 8)
+                    .padding(.vertical, 11)
+                    .padding(.horizontal, 4)
                     .frame(width: Self.slot)
                     .background {
-                        if isToday(day) {
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        if isSelected(day) {
+                            // The accent for a deliberate choice, the grey for
+                            // today — so a selected today still reads as chosen
+                            // rather than merely current.
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(Theme.Palette.accent.opacity(0.22))
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                        .strokeBorder(Theme.Palette.accent, lineWidth: 1.5)
+                                }
+                        } else if isToday(day) {
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
                                 .fill(Color(.secondarySystemGroupedBackground))
                         }
                     }
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             .scrollTargetLayout()
         }
+        // A light impact rather than `.selection`: this is a tap on a target,
+        // not a detent being passed, and the impact is the crisper of the two
+        // through a glove. Triggered on the value changing, so clearing a
+        // selection is felt as well as setting one.
+        .sensoryFeedback(.impact(weight: .light, intensity: 0.7), trigger: selection)
         .scrollIndicators(.hidden)
         // Inside the scroll, not around it: the row still runs edge to edge as
         // it moves, but it can't come to rest with today's circle flush against
@@ -110,7 +147,18 @@ struct WeekStrip: View {
             }
         } else if isToday(day) {
             Circle().strokeBorder(Color(.label), lineWidth: 2)
+        } else if isPast(day) {
+            // Dashed for a day that came and went without work. A solid ring
+            // reads as a container waiting to be filled; a broken one reads as
+            // a gap, which is what a missed day is.
+            Circle().strokeBorder(
+                Color(.quaternaryLabel),
+                style: StrokeStyle(lineWidth: 1.5, dash: [3, 3])
+            )
         } else {
+            // Solid, and quiet, for the days ahead. They haven't been missed —
+            // drawing them like the misses behind you would be a reproach for
+            // something that hasn't happened.
             Circle().strokeBorder(Color(.quaternaryLabel), lineWidth: 1.5)
         }
     }
@@ -131,6 +179,17 @@ struct WeekStrip: View {
     }
 
     private func isToday(_ day: Date) -> Bool { calendar.isDateInToday(day) }
+
+    private func isSelected(_ day: Date) -> Bool {
+        guard let selection else { return false }
+        return calendar.isDate(selection, inSameDayAs: day)
+    }
+
+    /// Strictly before today. Today is never "past" however late it is — the day
+    /// isn't over, and the strip shouldn't write it off before it is.
+    private func isPast(_ day: Date) -> Bool {
+        calendar.startOfDay(for: day) < calendar.startOfDay(for: .now)
+    }
 
     private func isTrained(_ day: Date) -> Bool {
         fraction(for: day) != nil
