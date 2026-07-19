@@ -53,21 +53,13 @@ struct RecentSessions: View {
             if recent.isEmpty && unfinished == nil {
                 empty
             } else {
-                // One card holding rows, rather than a card per session: three
-                // separate tiles would out-weigh the dashboard above them, and
-                // these are a list, not a set of readouts.
-                VStack(spacing: 0) {
-                    ForEach(Array(recent.enumerated()), id: \.element.id) { index, record in
-                        row(record)
-
-                        if index < recent.count - 1 {
-                            Divider()
-                                .overlay(Color(.separator))
-                                .padding(.leading, 14)
-                        }
-                    }
+                // A card each, not one card of hairline-separated rows. A
+                // session is a thing that happened, with a headline worth
+                // reading at a glance — rows made three of them into a table,
+                // and a table is what the History tab is for.
+                ForEach(recent) { record in
+                    row(record)
                 }
-                .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 18))
             }
         }
     }
@@ -108,28 +100,70 @@ struct RecentSessions: View {
         .buttonStyle(.plain)
     }
 
+    /// One session: what it was and when, the headline underneath, and the
+    /// details small at the bottom.
+    ///
+    /// Rounds are the headline rather than minutes. Minutes are how long you
+    /// were in the room; rounds are how much work happened in it, and a session
+    /// is remembered by its rounds.
     private func row(_ record: TrainingRecord) -> some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
                 Text(record.title)
-                    .font(.subheadline.weight(.semibold))
+                    .font(.subheadline)
                     .foregroundStyle(.primary)
                     .lineLimit(1)
 
-                Text(detail(for: record))
-                    .font(.caption)
+                Spacer(minLength: 8)
+
+                Text(record.date, format: .dateTime.hour().minute())
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
             }
 
-            Spacer(minLength: 8)
+            HStack(spacing: 8) {
+                Image(systemName: "figure.boxing")
+                    .font(.system(size: 19, weight: .semibold))
+                    .foregroundStyle(Theme.Palette.accentLight)
 
-            Text(record.date, format: .dateTime.weekday(.abbreviated))
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
+                Text(record.roundsCompleted == 1 ? "1 round" : "\(record.roundsCompleted) rounds")
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(.primary)
+            }
+
+            HStack(spacing: 14) {
+                if let seconds = record.sessionSeconds, seconds >= 60 {
+                    detail("clock", "\(seconds / 60) min")
+                }
+
+                // Only when it's true. "Finished" on every other card is noise
+                // that makes the one card carrying news harder to spot.
+                if record.endedEarly {
+                    detail("flag.slash", "ended early")
+                }
+
+                if let focus = record.focuses.first {
+                    detail("target", focus)
+                }
+            }
         }
-        .padding(14)
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 18))
+    }
+
+    /// One small fact, icon then value — the row of them under the headline.
+    private func detail(_ symbol: String, _ text: String) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: symbol)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Text(text)
+                .font(.subheadline)
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+        }
     }
 
     private var empty: some View {
@@ -141,17 +175,4 @@ struct RecentSessions: View {
             .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 18))
     }
 
-    /// Rounds and minutes, and the minutes only when they were measured — an old
-    /// session with no duration says nothing rather than claiming zero.
-    private func detail(for record: TrainingRecord) -> String {
-        var parts = ["\(record.roundsCompleted) rounds"]
-
-        if let seconds = record.sessionSeconds, seconds >= 60 {
-            parts.append("\(seconds / 60) min")
-        }
-        if record.endedEarly {
-            parts.append("ended early")
-        }
-        return parts.joined(separator: " · ")
-    }
 }
