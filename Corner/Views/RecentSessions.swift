@@ -58,15 +58,7 @@ struct RecentSessions: View {
                 // reading at a glance — rows made three of them into a table,
                 // and a table is what the History tab is for.
                 ForEach(recent) { record in
-                    // The whole card is the target, not a chevron in the corner
-                    // of it — these are read at a glance and tapped with gloves
-                    // on, and a small hit area is the wrong trade for both.
-                    NavigationLink {
-                        SessionDetail(record: record)
-                    } label: {
-                        row(record)
-                    }
-                    .buttonStyle(.plain)
+                    row(record)
                 }
             }
         }
