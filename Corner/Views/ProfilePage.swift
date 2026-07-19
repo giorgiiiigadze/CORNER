@@ -73,39 +73,29 @@ struct ProfilePage: View {
     /// week's: Home already answers "am I still going", and this answers "what
     /// have I done", which is the question a profile is for.
     private var totals: some View {
-        HStack(spacing: 0) {
+        // Sized to their content and grouped in the middle, rather than three
+        // equal thirds spread across the width. That's what keeps them reading
+        // as one line under the name instead of as a row of separate columns —
+        // and it's why the reference needs no rules between them.
+        HStack(spacing: 34) {
             total("\(stats.totalSessions)", "Sessions")
-            divider
             total("\(stats.totalRounds)", "Rounds")
-            divider
             total("\(stats.minutesTotal)", "Minutes")
         }
-        // No card behind it. The numbers are the loudest thing on the page and a
-        // panel around them competes for the same job — on the reference the
-        // three sit straight on the background with hairlines between, and
-        // that's why they read as one line rather than as a widget.
         .frame(maxWidth: .infinity)
     }
 
     private func total(_ value: String, _ label: String) -> some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 2) {
             Text(value)
-                .font(.system(size: 22, weight: .bold))
+                .font(.system(size: 17, weight: .bold))
                 .foregroundStyle(.primary)
                 .contentTransition(.numericText())
 
             Text(label)
-                .font(.caption)
+                .font(.system(size: 13))
                 .foregroundStyle(.secondary)
         }
-        .frame(maxWidth: .infinity)
-    }
-
-    /// Hairlines between the three, not around them — the row is one object.
-    private var divider: some View {
-        Rectangle()
-            .fill(Color(.separator))
-            .frame(width: 1, height: 24)
     }
 
     // MARK: - Backup
