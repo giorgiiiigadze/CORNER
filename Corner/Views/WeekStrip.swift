@@ -136,7 +136,7 @@ struct WeekStrip: View {
                     // keep both rings on exactly the same circle.
                     .inset(by: 1)
                     .trim(from: 0, to: fraction)
-                    .stroke(Theme.Palette.accent, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                    .stroke(Theme.Palette.accentLight, style: StrokeStyle(lineWidth: 2, lineCap: .round))
                     // Twelve o'clock, not three: a ring that starts at the right
                     // edge reads as an arbitrary arc, one that starts at the top
                     // reads as a dial being filled.
