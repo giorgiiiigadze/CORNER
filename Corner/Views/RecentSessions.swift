@@ -13,6 +13,22 @@ struct RecentSessions: View {
 
     let history: [TrainingRecord]
 
+    /// Today's session, if it was left partway through. Sits above the finished
+    /// ones because it's the only row on the screen that's a thing to *do*
+    /// rather than a thing that happened.
+    var unfinished: Unfinished?
+    var onResume: () -> Void = {}
+
+    struct Unfinished {
+        let title: String
+        let done: Int
+        let total: Int
+
+        var fraction: Double {
+            total > 0 ? min(Double(done) / Double(total), 1) : 0
+        }
+    }
+
     /// Enough to see a pattern, few enough that the dashboard above stays the
     /// point of the screen.
     private static let limit = 3
@@ -30,7 +46,11 @@ struct RecentSessions: View {
                 // the screen edge — the cards are what it's naming.
                 .padding(.leading, 4)
 
-            if recent.isEmpty {
+            if let unfinished {
+                resumeRow(unfinished)
+            }
+
+            if recent.isEmpty && unfinished == nil {
                 empty
             } else {
                 // One card holding rows, rather than a card per session: three
@@ -50,6 +70,42 @@ struct RecentSessions: View {
                 .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 18))
             }
         }
+    }
+
+    /// The one row you can act on: what's left of today, and a way back into it.
+    private func resumeRow(_ unfinished: Unfinished) -> some View {
+        Button(action: onResume) {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(unfinished.title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+
+                    Text("\(unfinished.done) of \(unfinished.total) rounds")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    // The same fraction the calendar ring draws, as a bar. Two
+                    // readings of one number, in the two places you'd look.
+                    ProgressView(value: unfinished.fraction)
+                        .progressViewStyle(.linear)
+                        .tint(Theme.Palette.accent)
+                }
+
+                Spacer(minLength: 8)
+
+                Text("Resume")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(Theme.Palette.accent, in: .capsule)
+            }
+            .padding(14)
+            .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 18))
+        }
+        .buttonStyle(.plain)
     }
 
     private func row(_ record: TrainingRecord) -> some View {

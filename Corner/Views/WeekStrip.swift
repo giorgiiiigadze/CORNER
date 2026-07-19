@@ -13,9 +13,14 @@ import SwiftUI
 /// which days it's made of and whether today is still open.
 struct WeekStrip: View {
 
-    /// Days that saw work. Compared by day, not by instant — a session at 23:50
-    /// and one at 00:10 are different days and have to mark different circles.
-    let trained: Set<Date>
+    /// How much of each day's work actually got done, 0 to 1, keyed by the start
+    /// of that day. Days with no training aren't in here at all — absent and
+    /// zero are different facts, and only one of them should draw a ring.
+    ///
+    /// Keyed by day rather than by session, and compared that way: a session at
+    /// 23:50 and one at 00:10 are different days and have to mark different
+    /// circles.
+    let progress: [Date: Double]
 
     /// How far back you can scroll. Twelve weeks is a season of training, and
     /// far enough that the strip stops being a week and starts being a record.
@@ -72,7 +77,7 @@ struct WeekStrip: View {
         // their edges as they pass the bounds.
         .scrollClipDisabled()
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Training calendar. \(trainedThisWeek) of 7 days trained this week.")
+        .accessibilityLabel("Training calendar. \(trainedThisWeek) of 7 days trained this week, \(completedThisWeek) finished in full.")
     }
 
     /// Outline in every state, filled in none.
@@ -83,8 +88,26 @@ struct WeekStrip: View {
     /// the session button, which inverts what the header is for.
     @ViewBuilder
     private func ring(for day: Date) -> some View {
-        if isTrained(day) {
-            Circle().strokeBorder(Theme.Palette.accent, lineWidth: 2)
+        if let fraction = fraction(for: day) {
+            ZStack {
+                // The unfilled remainder stays visible behind the arc. Without
+                // it a half-finished session reads as a broken circle rather
+                // than as half of a whole one — the missing part is the point.
+                Circle()
+                    .strokeBorder(Color(.quaternaryLabel), lineWidth: 2)
+
+                Circle()
+                    // `strokeBorder` insets by half the line width; `stroke` on
+                    // a trimmed shape doesn't, so the path is inset by hand to
+                    // keep both rings on exactly the same circle.
+                    .inset(by: 1)
+                    .trim(from: 0, to: fraction)
+                    .stroke(Theme.Palette.accent, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                    // Twelve o'clock, not three: a ring that starts at the right
+                    // edge reads as an arbitrary arc, one that starts at the top
+                    // reads as a dial being filled.
+                    .rotationEffect(.degrees(-90))
+            }
         } else if isToday(day) {
             Circle().strokeBorder(Color(.label), lineWidth: 2)
         } else {
@@ -110,12 +133,26 @@ struct WeekStrip: View {
     private func isToday(_ day: Date) -> Bool { calendar.isDateInToday(day) }
 
     private func isTrained(_ day: Date) -> Bool {
-        trained.contains { calendar.isDate($0, inSameDayAs: day) }
+        fraction(for: day) != nil
+    }
+
+    /// Nil on a day you didn't train, which is what separates "no ring" from a
+    /// ring that happens to be empty.
+    private func fraction(for day: Date) -> Double? {
+        progress[calendar.startOfDay(for: day)]
     }
 
     private var trainedThisWeek: Int {
         guard let week = calendar.dateInterval(of: .weekOfYear, for: .now) else { return 0 }
         return days.filter { week.contains($0) && isTrained($0) }.count
+    }
+
+    /// Days finished in full, for the accessibility summary — a partial day is
+    /// still a day trained, but it isn't a day completed, and a screen reader
+    /// shouldn't flatten the two.
+    private var completedThisWeek: Int {
+        guard let week = calendar.dateInterval(of: .weekOfYear, for: .now) else { return 0 }
+        return days.filter { week.contains($0) && (fraction(for: $0) ?? 0) >= 1 }.count
     }
 
     /// Full-strength on a day that means something, dimmed on the days either

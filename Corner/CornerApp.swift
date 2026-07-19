@@ -16,6 +16,10 @@ struct CornerApp: App {
         }
         // Every finished session is stored here and fed back into the next
         // prompt. It's what makes session 20 different from session 1.
-        .modelContainer(for: TrainingRecord.self)
+        // Both models, or the `TodaySession` query faults the moment Home
+        // appears — a `@Query` for a type the container doesn't know about is a
+        // runtime crash, not a compile error. Adding an entity is a lightweight
+        // migration, so existing histories survive it.
+        .modelContainer(for: [TrainingRecord.self, TodaySession.self])
     }
 }

@@ -15,6 +15,9 @@ struct ContentView: View {
 
     /// Newest first — the order the profile builder and the history list both want.
     @Query(sort: \TrainingRecord.date, order: .reverse) private var history: [TrainingRecord]
+
+    /// Today's plan, persisted so it survives a relaunch mid-session.
+    @Query(sort: \TodaySession.generatedAt, order: .reverse) private var plans: [TodaySession]
     @Environment(\.modelContext) private var modelContext
     @AppStorage(TrainingProfile.levelKey) private var level: String = TrainingProfile.Level.beginner.rawValue
     @AppStorage(CoachingNotes.key) private var notesData: Data = Data()
@@ -82,7 +85,18 @@ struct ContentView: View {
         .onChange(of: page) { previous, current in
             guard current == .create else { return }
             page = previous == .create ? .home : previous
-            showingSetup = true
+
+            // One session a day. With today's still unfinished the button
+            // resumes it rather than writing over it, and with today's finished
+            // it says so instead of quietly doing nothing — a button that
+            // ignores you is worse than one that answers.
+            if unfinishedToday != nil {
+                resumeToday()
+            } else if todayPlan != nil {
+                problem = "Today's session is done. The next one is tomorrow."
+            } else {
+                showingSetup = true
+            }
         }
         // All four tabs, all the time. The iOS 26 minimize gesture collapses the
         // bar to the selected tab alone as you scroll, which reads as the other
@@ -139,6 +153,85 @@ struct ContentView: View {
         }
     }
 
+    /// Today's plan, if one was written today. One a day is the rule: the
+    /// cornerman writes a session in the morning and you train it, rather than
+    /// rerolling until you get one you like — which is how a training app turns
+    /// into a slot machine.
+    private var todayPlan: TodaySession? {
+        plans.first { Calendar.current.isDateInToday($0.generatedAt) }
+    }
+
+    /// Rounds finished today, across however many sittings it took.
+    private var roundsDoneToday: Int {
+        history
+            .filter { Calendar.current.isDateInToday($0.date) }
+            .reduce(0) { $0 + $1.roundsCompleted }
+    }
+
+    /// What's left of today, or nil when today is done or was never started.
+    ///
+    /// Nil rather than zero on a finished day: "nothing left" and "no session"
+    /// are different states and the Home screen shows different things for them.
+    private var unfinishedToday: (plan: TodaySession, done: Int)? {
+        guard let plan = todayPlan, roundsDoneToday < plan.roundCount else { return nil }
+        return (plan, roundsDoneToday)
+    }
+
+    /// Picks up where the session stopped.
+    ///
+    /// The rounds already finished are dropped off the front rather than the
+    /// engine being taught to start midway — `Session` is a plain struct, so the
+    /// remainder *is* a session, and the engine runs it without knowing it's a
+    /// second sitting.
+    private func resumeToday() {
+        guard let (plan, done) = unfinishedToday, let session = plan.session else { return }
+
+        let remaining = Array(session.rounds.dropFirst(done))
+        guard !remaining.isEmpty else { return }
+
+        Task {
+            await launch(
+                Session(
+                    id: session.id,
+                    title: session.title,
+                    // No intro on a resume. It's the "here's what today is for"
+                    // line, and you've already heard it — replaying it would
+                    // make the second half sound like a different workout.
+                    intro: nil,
+                    rounds: remaining
+                )
+            )
+        }
+    }
+
+    /// How much of each day's planned work got finished, 0 to 1.
+    ///
+    /// Summed across the day rather than averaged per session: two sessions of
+    /// four rounds each, one abandoned after one round, is five rounds out of
+    /// eight — not the midpoint of 100% and 25%. The day is the unit here
+    /// because the day is what the calendar draws.
+    ///
+    /// Sessions with nothing planned are counted as finished. That's the honest
+    /// reading: a session with no plan can't have fallen short of one, and
+    /// dividing by zero to find out would be worse.
+    private var dayProgress: [Date: Double] {
+        let calendar = Calendar.current
+        var planned: [Date: Int] = [:]
+        var completed: [Date: Int] = [:]
+
+        for record in history {
+            let day = calendar.startOfDay(for: record.date)
+            planned[day, default: 0] += max(record.roundsPlanned, record.roundsCompleted)
+            completed[day, default: 0] += record.roundsCompleted
+        }
+
+        return planned.reduce(into: [:]) { result, entry in
+            let (day, total) = entry
+            let done = completed[day] ?? 0
+            result[day] = total > 0 ? min(Double(done) / Double(total), 1) : 1
+        }
+    }
+
     /// The masthead: who the app is, and the one number that says whether you're
     /// keeping at it.
     ///
@@ -180,7 +273,7 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 26) {
             header
 
-            WeekStrip(trained: Set(history.map(\.date)))
+            WeekStrip(progress: dayProgress)
                 .padding(.horizontal, -16)
         }
         .padding(.top, 8)
@@ -239,7 +332,13 @@ struct ContentView: View {
             Section {
                 VStack(spacing: 20) {
                     SummaryCards(stats: TrainingStats.from(history: history))
-                    RecentSessions(history: history)
+                    RecentSessions(
+                        history: history,
+                        unfinished: unfinishedToday.map {
+                            .init(title: $0.plan.focus, done: $0.done, total: $0.plan.roundCount)
+                        },
+                        onResume: resumeToday
+                    )
                 }
                     // Zero, not 16. The list style already insets the section,
                     // and any row inset is charged on top of that — the cards
@@ -275,6 +374,13 @@ struct ContentView: View {
         let generator = SessionGenerator(client: try? ClaudeClient.fromBundle())
         let session = await generator.plan(request)
         planned = session
+
+        // Stored before it runs, not after: the point is that a session
+        // abandoned halfway — or interrupted by a crash — can still be found and
+        // finished. Written at the end it would only ever record what already
+        // worked.
+        modelContext.insert(TodaySession(planned: session))
+        try? modelContext.save()
 
         // Straight into the workout. The Today card used to sit between these
         // two steps — it held the written session and waited for a second tap
