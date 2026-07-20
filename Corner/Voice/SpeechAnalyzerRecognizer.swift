@@ -58,6 +58,24 @@ actor SpeechAnalyzerRecognizer: VoiceRecognizer {
     /// Without it, a phrase fires once as a volatile result and again when finalized.
     private var consumedThrough: CMTime = .negativeInfinity
 
+    /// Where the utterance that produced the last command began, and which
+    /// command it produced.
+    ///
+    /// `consumedThrough` was meant to stop one phrase firing twice and cannot:
+    /// it anchors on the *end* of the range, and a volatile result and the final
+    /// that supersedes it do not share an end. Saying "next round" produces a
+    /// volatile at end T1, which fires; the speaker keeps going; the final
+    /// arrives at end T2 > T1, passes the guard, and fires the same command
+    /// again. One phrase, two commands — the session jumping two rounds on a
+    /// single "next round", and "one more round" queueing two.
+    ///
+    /// The start is the stable identity of an utterance: every later result for
+    /// it carries the same start, and a genuinely new utterance carries a later
+    /// one. Anchoring here also leaves "end session" twice working as the
+    /// confirmation it's meant to be — that's two utterances, two starts, which
+    /// a time-window dedupe would have swallowed.
+    private var lastCommand: (kind: VoiceCommand, start: CMTime)?
+
     private let commandContinuation: AsyncStream<VoiceCommand>.Continuation
     private let commandStream: AsyncStream<VoiceCommand>
     private let transcriptContinuation: AsyncStream<String>.Continuation
@@ -357,6 +375,16 @@ actor SpeechAnalyzerRecognizer: VoiceRecognizer {
         // expensive to delay.
         if command == .endSession && !result.isFinal { return }
 
+        // The same command, out of the same utterance, having already fired.
+        // Different commands are let through even from an overlapping range: a
+        // volatile that grows from "next round" into "next round… pause" is two
+        // instructions, and only the repeat of the first is the artefact.
+        if let last = lastCommand, last.kind == command, result.range.start <= last.start {
+            log.debug("Repeat of \(command.rawValue, privacy: .public) in one utterance — ignored")
+            return
+        }
+
+        lastCommand = (command, result.range.start)
         consumedThrough = end
         log.debug("Heard \(text, privacy: .public) -> \(command.rawValue, privacy: .public)")
         commandContinuation.yield(command)

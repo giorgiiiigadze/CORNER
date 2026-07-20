@@ -353,13 +353,14 @@ struct SessionEngineTests {
         #expect(engine.phase == .active)
     }
 
-    /// Walking out of a round is one transition, so it gets one bell.
+    /// Walking out of a round lands in the rest, not in the next round.
     ///
-    /// The round-one bell, then "next round", then the round-two opener and its
-    /// bell — two rings total. A third would be the old behaviour: the round
-    /// ending and the round starting each ringing, a sentence apart, which
-    /// sounds like a mistake rather than a transition.
-    @Test func skippingARoundRingsOnce() async throws {
+    /// The reversal: a skip used to jump the rest as well, on the reading that
+    /// "next round" means the next round. Nobody says it wanting less recovery —
+    /// they say it because the round is finished with them — so the rest they
+    /// were owed still happens, and the round after it is planned around their
+    /// having had it.
+    @Test func skippingARoundLandsInTheRest() async throws {
         let (engine, voice, recognizer, bell) = makeEngine(ticker: FastTicker())
         try await engine.beginListening()
         await recognizer.hear(.start)
@@ -368,30 +369,79 @@ struct SessionEngineTests {
 
         await recognizer.hear(.nextRound)
 
-        // Round two being active means its bell has already gone — the engine
-        // rings and then counts down. So the count here is the whole story: two
-        // if the handover rang once, three if round one's ending rang too.
-        #expect(await eventually { engine.round?.index == 2 && engine.phase == .active })
-        #expect(bell.rings == 2, "one bell for one transition, not two")
+        #expect(await eventually { engine.phase == .resting }, "the skip opens the rest")
+        #expect(engine.round?.index == 1, "still round one's rest, not round two")
+        #expect(bell.rings == 2, "the round ended, which is one transition and one bell")
         #expect(await voice.lines.contains("Moving on."), "the skip answers itself in words")
+
+        // And the rest runs its course into round two, as any rest would.
+        #expect(await eventually { engine.round?.index == 2 && engine.phase == .active })
+        #expect(bell.rings == 3, "round two's own bell")
     }
 
-    /// Walking out of the *last* round still rings, because nothing follows it
-    /// to do the job. There the bell is the session ending, not a handover.
-    @Test func skippingTheLastRoundStillRings() async throws {
+    /// Said during the rest, "next round" cuts the rest short.
+    ///
+    /// The other half of the reversal, and the reason it costs nothing: a
+    /// fighter who genuinely wants to crack on is still one word from doing it.
+    @Test func skippingDuringTheRestStartsTheNextRound() async throws {
+        let (engine, _, recognizer, _) = makeEngine(ticker: FastTicker())
+        try await engine.beginListening()
+        await recognizer.hear(.start)
+        #expect(await eventually { engine.phase == .active })
+
+        await recognizer.hear(.nextRound)
+        #expect(await eventually { engine.phase == .resting }, "in the rest")
+
+        await recognizer.hear(.nextRound)
+        #expect(
+            await eventually { engine.round?.index == 2 && engine.phase == .active },
+            "the second ask ends the rest"
+        )
+    }
+
+    /// One "next round" moves one round, however many times it arrives.
+    ///
+    /// The bug this pins: the recognizer fired a phrase twice — once as a
+    /// volatile result, once when it finalized — and a session with rest between
+    /// rounds would jump two on a single spoken "next round". The recognizer no
+    /// longer does that, and this is the engine refusing it anyway, because a
+    /// command that silently costs a round is worth guarding at both ends.
+    ///
+    /// Two rounds in the fixture, so a double-skip is visible as the session
+    /// ending: round one, skip twice, and if both land there's nothing left.
+    @Test func repeatedSkipsMoveOneRound() async throws {
+        let (engine, _, recognizer, _) = makeEngine(ticker: FastTicker())
+        try await engine.beginListening()
+        await recognizer.hear(.start)
+        #expect(await eventually { engine.phase == .active }, "round one under way")
+
+        // Back to back, the way one utterance arriving twice would land.
+        await recognizer.hear(.nextRound)
+        await recognizer.hear(.nextRound)
+
+        #expect(
+            await eventually { engine.round?.index == 2 },
+            "one skip, one round — not straight past round two"
+        )
+        #expect(engine.phase != .debrief, "the session is not over")
+    }
+
+    /// Walking out of the *last* round ends the session — there's no rest after
+    /// it to land in, and its bell is the session ending rather than a handover.
+    @Test func skippingTheLastRoundEndsTheSession() async throws {
         let (engine, _, recognizer, bell) = makeEngine(ticker: FastTicker())
         try await engine.beginListening()
         await recognizer.hear(.start)
         #expect(await eventually { engine.phase == .active })
 
-        await recognizer.hear(.nextRound)   // out of round one, into round two
+        await recognizer.hear(.nextRound)   // out of round one, into its rest
         #expect(await eventually { engine.round?.index == 2 && engine.phase == .active })
-        #expect(bell.rings == 2)
+        #expect(bell.rings == 3, "round one, its ending, and round two")
 
         await recognizer.hear(.nextRound)   // out of round two, which is the last
 
         #expect(await eventually { engine.phase == .debrief })
-        #expect(bell.rings == 3, "the last round's bell is the session ending")
+        #expect(bell.rings == 4, "the last round's bell is the session ending")
     }
 
     /// Silence is still the default once the bell goes: he says his sentence and
@@ -729,23 +779,59 @@ struct SessionEngineTests {
         #expect(!engine.isFinished, "that yes was answering nothing")
     }
 
-    /// Nothing to lose before the first bell, so the question would be ceremony —
-    /// and a confirmation you always say yes to is one you stop reading.
-    @Test func endingBeforeItStartsDoesNotAsk() async throws {
+    /// Before the first bell, every word but "let's go" is inert — including
+    /// this one.
+    ///
+    /// It used to end the session outright, on the grounds that there was
+    /// nothing to lose yet. What that missed is that the screen stands open
+    /// while hands are wrapped and the room talks, and "end session" is a
+    /// phrase a room can produce. The way out before you've started is the End
+    /// button, which takes a deliberate hand.
+    @Test func endingBeforeItStartsDoesNothing() async throws {
         let (engine, _, recognizer, _) = makeEngine()
         try await engine.beginListening()
         await recognizer.hear(.endSession)
         await settle()
 
-        #expect(!engine.awaitingEndConfirmation)
-        #expect(engine.isFinished)
+        #expect(!engine.awaitingEndConfirmation, "no question was asked")
+        #expect(!engine.isFinished, "and nothing was ended")
+        #expect(engine.phase == .idle, "still waiting to be told to start")
+    }
+
+    /// Nothing but "let's go" reaches the session before it starts.
+    ///
+    /// One test for the whole rule rather than one per command: the guard is a
+    /// single line, and what's worth pinning is that it covers everything.
+    @Test func onlyLetsGoHasPowerBeforeTheBell() async throws {
+        let (engine, voice, recognizer, bell) = makeEngine()
+        try await engine.beginListening()
+
+        for command in [VoiceCommand.pause, .resume, .nextRound, .oneMoreRound, .timeCheck, .confirm] {
+            await recognizer.hear(command)
+        }
+        await settle()
+
+        #expect(engine.phase == .idle, "nothing started anything")
+        #expect(bell.rings == 0, "nothing rang")
+        #expect(engine.totalRounds == 2, "'one more round' added nothing")
+        // The sharpest of them: it used to answer "Adding a round at the end"
+        // and add nothing at all.
+        #expect(await voice.lines.isEmpty, "and none of it was answered out loud")
+
+        await recognizer.hear(.start)
+        #expect(await eventually { engine.phase != .idle }, "and then the one word that works")
     }
 
     /// An abandoned workout must stop paying for lines nobody will hear.
     @Test func endingStopsPrewarming() async throws {
-        let (engine, voice, recognizer, _) = makeEngine()
+        let (engine, voice, recognizer, _) = makeEngine(ticker: FastTicker())
         try await engine.beginListening()
+        // Started first: ending is only a command once the session is running.
+        await recognizer.hear(.start)
+        #expect(await eventually { engine.phase != .idle })
+
         await recognizer.hear(.endSession)
+        await recognizer.hear(.endSession)   // saying it twice is the confirmation
         await settle()
 
         #expect(await voice.didStopPrewarming)

@@ -313,6 +313,28 @@ final class SessionEngine {
     func handle(_ command: VoiceCommand) async {
         log.debug("Command: \(command.rawValue, privacy: .public)")
 
+        // Before the first bell, "let's go" is the only word with any power.
+        //
+        // The screen comes up the moment a session is written, and it sits there
+        // while hands get wrapped, the phone gets propped, and the room carries
+        // on talking. Every one of those is a stretch of speech nobody is
+        // addressing to the app, and the grammar is seven common phrases — so
+        // the mic was live over a conversation with the power to queue rounds
+        // and end sessions before anything had started.
+        //
+        // Most commands were individually inert at idle already, by their own
+        // guards. Not all: "one more round" answered "Adding a round at the end"
+        // and added nothing, and "time check" read out a clock that wasn't
+        // running. One rule in one place is worth more than seven guards that
+        // each have to remember.
+        //
+        // Silently. A cornerman who argues with a room he isn't part of is
+        // worse than one who waits to be spoken to.
+        guard phase != .idle || command == .start else {
+            log.debug("Ignored — the session hasn't started")
+            return
+        }
+
         // Anything else means they've moved on, and a question they've moved on
         // from isn't standing any more. Without this, "end session" … "next" …
         // "yeah" ends the session on a "yeah" that was answering nothing.
@@ -538,8 +560,12 @@ final class SessionEngine {
             guard !Task.isCancelled else { return }
             completedRounds += 1
 
-            // Read before anything else can set it again.
-            let walkedOut = consumeSkip()
+            // Cleared, not read: how the round ended no longer changes what
+            // happens next, since a skipped round rests like any other. It still
+            // has to be cleared here — left standing it would satisfy the guard
+            // in `skipToNextRound` and swallow the fighter's next "next round",
+            // which is the one they'd say to cut the rest short.
+            _ = consumeSkip()
 
             // A round requested mid-session lands after the current one. Ahead
             // of the bell below, because appending here is what decides whether
@@ -554,22 +580,32 @@ final class SessionEngine {
             // Ends the round and opens the rest in one stroke, the way a real
             // bell does — there aren't two sounds, there's one transition.
             //
-            // Unless the fighter walked out of the round and another follows. A
-            // skip already answers itself: they said "next round", heard "moving
-            // on", and the next opener and its bell are seconds behind this. One
-            // transition would arrive as two rings with a sentence wedged
-            // between them. A round that ran its course still earns its bell,
-            // and so does the last one — there the bell is the session ending,
-            // and nothing rings after it.
-            if !walkedOut || isLast {
-                bell.ring()
-            }
+            // Unconditional now. It used to be suppressed on a skip, because a
+            // skip went straight into the next round's opener and its bell, and
+            // two rings a sentence apart sound like a mistake. A skip lands in
+            // the rest now, so every route out of a round is the same
+            // transition and earns the same single ring.
+            bell.ring()
 
-            // "Next round" means the next round. Resting here is what made the
-            // command mean two different things depending on when it was said:
-            // asked to move on mid-round, the app answered "Moving on." and then
-            // gave them a minute of rest, which is not moving on.
-            if !isLast, round.rest > 0, !walkedOut {
+            // A skipped round still gets its rest.
+            //
+            // This reverses what the code did before, and the argument it used
+            // is worth keeping visible: "next round" was taken to mean the next
+            // *round*, so cutting a round short jumped the rest as well, on the
+            // grounds that resting isn't moving on.
+            //
+            // What that missed is why the words get said. Nobody says "next
+            // round" because they want less rest — they say it because the round
+            // is done, their arms are gone, or the combination stopped working.
+            // Skipping the rest as well answered "I'm finished with this round"
+            // with "then you don't need to breathe", which is the opposite of
+            // what a corner does. The rest is the recovery the next round is
+            // planned around; taking it away is a punishment for asking.
+            //
+            // Ending the rest early is still one word away: "next round" during
+            // the rest does exactly that, which is where a fighter who genuinely
+            // wants to crack on says it.
+            if !isLast, round.rest > 0 {
                 phase = .resting
                 await countDown(from: round.rest)
                 guard !Task.isCancelled else { return }
@@ -618,6 +654,15 @@ final class SessionEngine {
         // Nothing to cut short while the opener is being spoken — the countdown
         // hasn't started, and it would overwrite this the moment it does.
         guard phase == .active || phase == .resting else { return }
+
+        // A skip already in flight swallows the second ask. The recognizer is
+        // the one that should never send two, and now doesn't — but a command
+        // that can silently cost a round is worth refusing twice, and the honest
+        // reading of "next round, next round" from someone standing at a bag is
+        // one round anyway: they said it again because the first one didn't look
+        // like it landed.
+        guard !skipRequested else { return }
+
         skipRequested = true
         secondsRemaining = 0
     }
