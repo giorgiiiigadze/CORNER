@@ -80,6 +80,19 @@ struct ContentView: View {
     /// this", and the one place that holds every session should hold this one.
     @AppStorage("dismissedPlanID") private var dismissedPlanID: String = ""
 
+    /// Whether the welcome sheet has been seen. Once, ever — not per account:
+    /// it explains how the app works, and the app doesn't work differently for
+    /// the second person to sign in on the same phone.
+    @AppStorage("hasSeenWelcome") private var hasSeenWelcome: Bool = false
+
+    /// Whether it's on screen right now. Separate from `hasSeenWelcome` because
+    /// the sheet doesn't appear the instant it's owed — see `offerWelcome`.
+    @State private var showingWelcome = false
+
+    /// Whether the splash is still up. Home is built and running underneath it,
+    /// so this is the only honest signal that the fighter can see anything.
+    @Environment(\.isLaunching) private var isLaunching
+
     @Environment(AuthController.self) private var auth
 
     private let audioSession = AudioSessionController()
@@ -174,6 +187,21 @@ struct ContentView: View {
         // The chrome is dark; the live timer pins itself back to light, because a
         // pale screen across a gym is the one thing that screen is for.
         .preferredColorScheme(.dark)
+        // Presented from here rather than from the app's root, so it lands on
+        // Home with the tab bar behind it — not over the splash or the sign-in
+        // screen, where it would be explaining a screen they haven't reached.
+        .task(id: isLaunching) { await offerWelcome() }
+        .sheet(isPresented: $showingWelcome) {
+            WelcomeSheet {
+                hasSeenWelcome = true
+                showingWelcome = false
+            }
+                // Fitted rather than full height: it's four elements, and a
+                // full-screen sheet for four elements reads as a step in a flow
+                // that has more steps coming.
+                .presentationDetents([.height(520)])
+                .presentationDragIndicator(.visible)
+        }
         .sheet(isPresented: $showingSetup) {
             SessionSetupSheet(request: $request) {
                 writing = Task { await generate() }
@@ -614,6 +642,33 @@ struct ContentView: View {
                 cancelLaunch()
             }
         }
+    }
+
+    /// Shows the welcome sheet a beat after the app has settled, once.
+    ///
+    /// Two waits, and they're different things. The first is for the splash to
+    /// lift: Home is built and running underneath it, so presenting on appear
+    /// would put the sheet up behind the mark and reveal it already open — the
+    /// fighter would never see it arrive, and would land on a modal instead of
+    /// on their app.
+    ///
+    /// The second is the beat after that. Landing on Home and *then* being
+    /// handed one thing to read is a different experience from being handed it
+    /// at the door; the pause is what makes it feel like the app spoke up
+    /// rather than blocked the way in.
+    ///
+    /// Keyed on `isLaunching`, so a slow restore that keeps the splash up
+    /// longer simply moves the whole thing later rather than racing it.
+    private func offerWelcome() async {
+        guard !isLaunching, !hasSeenWelcome else { return }
+
+        try? await Task.sleep(for: .seconds(1.5))
+
+        // Re-checked: the sleep is cancellable and 1.5 seconds is long enough
+        // for them to have gone somewhere else, or for the sheet to have been
+        // dealt with on another path.
+        guard !Task.isCancelled, !hasSeenWelcome else { return }
+        showingWelcome = true
     }
 
     /// Backing out before the session starts.

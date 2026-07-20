@@ -8,6 +8,17 @@
 import SwiftData
 import SwiftUI
 
+/// Whether the splash is still covering the app.
+///
+/// Published down the tree because "the launch is over" is a fact only the root
+/// knows, and screens underneath need it: the view tree is built and running
+/// *behind* the splash, so a `task` on Home fires while the mark is still up.
+/// Anything that should wait for the fighter to actually see Home has to wait
+/// on this rather than on its own appearance.
+extension EnvironmentValues {
+    @Entry var isLaunching: Bool = false
+}
+
 @main
 struct CornerApp: App {
 
@@ -77,6 +88,7 @@ struct CornerApp: App {
             }
             .preferredColorScheme(.dark)
             .animation(.easeInOut(duration: 0.35), value: launching)
+            .environment(\.isLaunching, launching)
             .task { await openingSequence() }
         }
         // Every finished session is stored here and fed back into the next
