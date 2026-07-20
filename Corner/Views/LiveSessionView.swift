@@ -130,15 +130,20 @@ struct LiveSessionView: View {
     /// the same answer in a form you can catch sideways from three metres, which
     /// is the only way this screen is ever looked at.
     private var rounds: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 4) {
-                ForEach(1...max(engine.totalRounds, 1), id: \.self) { index in
-                    bar(index)
-                }
+        HStack(spacing: 4) {
+            ForEach(1...max(engine.totalRounds, 1), id: \.self) { index in
+                bar(index)
             }
-            .frame(height: 6)
-            caption("Rounds")
         }
+        .frame(height: 6)
+        // No caption. A row of bars that fill as the session runs doesn't need
+        // to be told it's the rounds — and the label was the one piece of text
+        // on this screen nobody reads twice.
+        //
+        // The padding is what the caption used to occupy, kept so the strip
+        // sits down near the panel rather than floating in the middle of the
+        // gap left behind.
+        .padding(.top, 20)
     }
 
     /// One round: a track, and a fill that grows across it as the round runs.

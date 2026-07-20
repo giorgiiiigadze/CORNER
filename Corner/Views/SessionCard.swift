@@ -159,7 +159,7 @@ struct ResumeCard: View {
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
                     .frame(height: 44)
-                    .background(Theme.Palette.accent, in: .capsule)
+                    .background(Theme.Palette.accent, in: Theme.buttonShape)
             }
             .buttonStyle(.plain)
             .padding(.top, 2)
@@ -247,12 +247,12 @@ struct LiveSessionIndicator: View {
 
                     Spacer(minLength: 8)
 
+                    // No chevron. The whole bar is the tap target and the X sits
+                    // beside it — a third mark in the same corner was one more
+                    // thing to read on the one element that should be read at a
+                    // glance.
                     Text(tally)
                         .font(.subheadline.weight(.semibold).monospacedDigit())
-                        .foregroundStyle(Self.ink.opacity(0.75))
-
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.bold))
                         .foregroundStyle(Self.ink.opacity(0.75))
                 }
                 .padding(.leading, 14)
@@ -283,7 +283,12 @@ struct LiveSessionIndicator: View {
             Spacer(minLength: 0)
                 .frame(width: 4)
         }
-        .background(Theme.Live.work, in: .rect(cornerRadius: 18, style: .continuous))
+        // Fully rounded, not a rounded rectangle. The dashboard under this is
+        // all 18pt cards; matching that radius made the banner read as one more
+        // card that happened to be green. A capsule reads as a status pill —
+        // a different kind of object, which is what it is: the cards are things
+        // that happened, this is a thing that's still going.
+        .background(Theme.Live.work, in: .capsule)
         .onAppear { pulsing = true }
     }
 

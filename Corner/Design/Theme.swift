@@ -52,6 +52,19 @@ enum Theme {
 
         /// Divider-weight. Borders and rules.
         static let hairline = Color(.separator)
+
+        /// The Rounds sparkline. Health's blue, read off a screenshot rather
+        /// than sampled — nudge it here if it's a shade out.
+        ///
+        /// Not the accent, and that's the point of it being a different hue
+        /// entirely: red on this screen means "this is the day the numbers are
+        /// describing", and a chart drawn in the same red made every bar look
+        /// like it was making that claim.
+        static let chart = Color(red: 0.04, green: 0.65, blue: 0.94)
+
+        /// The rules behind the bars. Barely there — they exist to give the
+        /// bars a floor to stand on, not to be read.
+        static let chartGrid = Color(white: 1).opacity(0.08)
     }
 
     /// The live timer. Black, and its own palette entirely: it's read across a
@@ -126,6 +139,25 @@ enum Theme {
     enum Layout {
         static let gutter: CGFloat = 24
         static let stackSpacing: CGFloat = 16
+
+        /// The corner on every full-width button in the app.
+        ///
+        /// A rounded rectangle rather than a capsule. At these heights a capsule
+        /// has no straight edge left at all, which reads as a pill — a thing you
+        /// toggle or a label you don't press. This keeps a flat run through the
+        /// middle, so it still reads as a button.
+        ///
+        /// Roughly a third of the button's height, which is the proportion that
+        /// holds whether the button is 44 or 52 tall. One constant because four
+        /// screens draw this button and they were four separate literals away
+        /// from disagreeing.
+        static let buttonCorner: CGFloat = 20
+    }
+
+    /// The shape every full-width button is cut to. Continuous, matching the
+    /// system's own controls rather than the tighter circular curve.
+    static var buttonShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: Layout.buttonCorner, style: .continuous)
     }
 
     /// Sized to be read from across a room, not from arm's length.

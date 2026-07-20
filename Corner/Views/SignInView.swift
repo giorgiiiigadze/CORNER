@@ -102,7 +102,7 @@ struct SignInView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .frame(height: 52)
-                .background(Theme.Palette.accent, in: .capsule)
+                .background(Theme.Palette.accent, in: Theme.buttonShape)
                 .foregroundStyle(.white)
             }
             .disabled(auth.isWorking)

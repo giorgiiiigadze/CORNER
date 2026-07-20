@@ -135,7 +135,7 @@ struct ProfilePage: View {
                 }
                 .frame(maxWidth: .infinity)
                 .frame(height: 44)
-                .background(Theme.Palette.accent, in: .capsule)
+                .background(Theme.Palette.accent, in: Theme.buttonShape)
                 .foregroundStyle(.white)
             }
             .disabled(isSyncing)
