@@ -48,10 +48,21 @@ struct ContentView: View {
     /// point.
     @AppStorage(SessionEngine.coachingKey) private var speaksCoaching: Bool = true
 
-    @State private var live: SessionEngine?
+    /// The live screen, from the tap that asks for a session to the end of it.
+    ///
+    /// Not the engine any more. The engine can't exist until the plan does, and
+    /// the whole point is that the screen goes up before that — so this is
+    /// present from the moment "Write it" is tapped, carrying the engine once
+    /// there's one to carry. Nil means no session screen, which is the only
+    /// thing the rest of this file ever asked it.
+    @State private var live: SessionLaunch?
+
+    /// The write itself, held so backing out can cancel it. Without this a
+    /// cancelled session still finishes writing in the background and shoulders
+    /// its way onto the screen a few seconds later.
+    @State private var writing: Task<Void, Never>?
+
     @State private var problem: String?
-    @State private var planned: PlannedSession?
-    @State private var isGenerating = false
     @State private var showingSetup = false
     @State private var request = SessionRequest()
 
@@ -145,17 +156,19 @@ struct ContentView: View {
         .preferredColorScheme(.dark)
         .sheet(isPresented: $showingSetup) {
             SessionSetupSheet(request: $request) {
-                Task { await generate() }
+                writing = Task { await generate() }
             }
             // Tint is inherited, and the bar's is now white — which would leave
             // the sheet's "Write it" white on white. The accent belongs here:
             // this is the action that starts training.
             .tint(Theme.Palette.accent)
         }
-        .fullScreenCover(item: $live) { engine in
-            LiveSessionView(engine: engine) { summary in
-                record(summary)
-            }
+        // Keyed on the launch, not the engine — the cover has to be up while the
+        // engine is still nil, which is the entire change. The id is stable
+        // across the swap, so filling the engine in swaps the *content* of a
+        // presented cover rather than dismissing one and presenting another.
+        .fullScreenCover(item: $live) { _ in
+            liveScreen
         }
         // Hand the audio back when the workout screen goes away.
         //
@@ -492,9 +505,19 @@ struct ContentView: View {
         .listSectionSpacing(SummaryCards.gap)
     }
 
+    /// Writes today's session and runs it, with the screen up for all of it.
+    ///
+    /// The order is the point. The cover is presented on the first line, before
+    /// a single network call — writing a session is a round-trip to Claude, and
+    /// that used to happen with the sheet dismissed and Home on screen, so the
+    /// tap had no visible effect until the plan came back. Long enough that the
+    /// honest reading was that the button hadn't worked.
+    ///
+    /// Now the session screen is the response to the tap, and the writing
+    /// happens behind it — same as the splash covering the launch restore.
     private func generate() async {
-        isGenerating = true
-        defer { isGenerating = false }
+        // Instant, and deliberately the first thing: everything below is slow.
+        live = SessionLaunch()
 
         // Everything here is now real: the request is what the user picked in
         // the sheet, and the profile is derived from sessions they finished.
@@ -503,7 +526,12 @@ struct ContentView: View {
 
         let generator = SessionGenerator(client: ClaudeClient.viaProxy(token: { [auth] in await auth.token() }))
         let session = await generator.plan(request)
-        planned = session
+
+        // They may have cancelled while it was being written. Both checks: the
+        // task is cancelled by the Cancel button, and `live` is nil if the cover
+        // went away by any other route. Either way the plan is dropped rather
+        // than stored — an unasked-for session shouldn't land in history.
+        guard !Task.isCancelled, live != nil else { return }
 
         // Stored before it runs, not after: the point is that a session
         // abandoned halfway — or interrupted by a crash — can still be found and
@@ -517,6 +545,37 @@ struct ContentView: View {
         // on Start. With the card gone the sheet is the whole decision, so
         // "Write it" means write it and go.
         await launch(session.session)
+    }
+
+    /// The live screen's two faces. One cover, one presentation, two contents.
+    ///
+    /// The wait and the session are the same screen at two moments, not two
+    /// screens — same palette, same gutter, same background modifier — so the
+    /// plan landing reads as the screen filling in rather than a new screen
+    /// arriving.
+    @ViewBuilder
+    private var liveScreen: some View {
+        if let engine = live?.engine {
+            LiveSessionView(engine: engine) { summary in
+                record(summary)
+            }
+        } else {
+            SessionPreparingView(request: request, problem: live?.problem) {
+                cancelLaunch()
+            }
+        }
+    }
+
+    /// Backing out before the session starts.
+    ///
+    /// Cancels the write first: a plan that arrives after this would otherwise
+    /// be inserted and launched into an empty screen. Nothing to tear down on
+    /// the audio side — the cover's own `onChange` handles that, and on this
+    /// path the session was very likely never activated at all.
+    private func cancelLaunch() {
+        writing?.cancel()
+        writing = nil
+        live = nil
     }
 
     /// Records what happened, so the next session can differ from this one.
@@ -548,15 +607,20 @@ struct ContentView: View {
         try? modelContext.save()
     }
 
+    /// Turns a written plan into a running session, on the screen that's already
+    /// up.
+    ///
+    /// Every failure here now reports onto the live screen rather than into
+    /// Home's alert. It has to: the cover is presented by the time this runs, so
+    /// an alert raised behind it is an alert nobody can see, and the fighter is
+    /// left looking at "Writing your session" forever.
     private func launch(_ session: Session) async {
-        problem = nil
-
         guard await audioSession.requestMicrophoneAccess() else {
-            problem = "Microphone access is required. Enable it in Settings."
+            live?.problem = "Microphone access is required. Enable it in Settings."
             return
         }
         guard await requestSpeechAccess() else {
-            problem = "Speech recognition access is required. Enable it in Settings."
+            live?.problem = "Speech recognition access is required. Enable it in Settings."
             return
         }
 
@@ -565,7 +629,7 @@ struct ContentView: View {
         do {
             try audioSession.activate()
         } catch {
-            problem = "Couldn't start audio: \(error.localizedDescription)"
+            live?.problem = "Couldn't start audio: \(error.localizedDescription)"
             return
         }
 
@@ -580,7 +644,9 @@ struct ContentView: View {
             token: { [auth] in await auth.token() }
         )
 
-        live = SessionEngine(
+        // Filled in rather than assigned: the cover is already up, and replacing
+        // the whole launch would change its id and bounce the presentation.
+        live?.engine = SessionEngine(
             session: session,
             voice: voice,
             recognizer: SpeechAnalyzerRecognizer(),
@@ -608,8 +674,22 @@ struct ContentView: View {
     }
 }
 
-extension SessionEngine: Identifiable {
-    nonisolated var id: ObjectIdentifier { ObjectIdentifier(self) }
+/// A session screen, from the tap to the bell.
+///
+/// One value covering both moments, and the identity is its own rather than the
+/// engine's — that's what lets the cover stay presented while the engine appears
+/// underneath it. Keying the presentation on the engine, as it used to, made the
+/// engine's arrival a *new* item and therefore a new presentation, which is the
+/// dismiss-and-represent flash this exists to avoid.
+struct SessionLaunch: Identifiable {
+    let id = UUID()
+
+    /// Nil while the plan is still being written. Set once, when it lands.
+    var engine: SessionEngine?
+
+    /// Set if the session couldn't be started at all. Shown on the waiting
+    /// screen, because by then it's the only screen there is.
+    var problem: String?
 }
 
 #Preview {
