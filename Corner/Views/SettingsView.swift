@@ -34,14 +34,21 @@ struct SettingsView: View {
                 ) {
                     Toggle("", isOn: $speaksCoaching)
                         .labelsHidden()
-                        // Stated, not inherited. The tab bar tints this subtree
-                        // white, which would leave an "on" toggle as a white
+                        // The system green, which is what a toggle is green
+                        // everywhere else on the phone — a switch is one of the
+                        // few controls with a colour people already know.
+                        //
+                        // Stated, not inherited: the tab bar tints this subtree
+                        // white, so without this an "on" toggle would be a white
                         // track on a grey card — on and off telling each other
                         // apart by a shade.
-                        .tint(Theme.Palette.accentLight)
+                        //
+                        // It was the brand red, which read as a warning on a
+                        // control whose "on" state is the good one.
+                        .tint(.green)
                 }
             }
-            .listRowBackground(Color(.tertiarySystemGroupedBackground))
+            .listRowBackground(Theme.Palette.surface)
 
             Section {
                 NavigationLink {
@@ -64,7 +71,7 @@ struct SettingsView: View {
                     )
                 }
             }
-            .listRowBackground(Color(.tertiarySystemGroupedBackground))
+            .listRowBackground(Theme.Palette.surface)
 
             // Last, and on its own. Sign-out is the one thing here that can't be
             // undone by tapping again, and it has no business sitting a
@@ -75,20 +82,24 @@ struct SettingsView: View {
                 }
                 .font(.body)
             }
-            .listRowBackground(Color(.tertiarySystemGroupedBackground))
+            .listRowBackground(Theme.Palette.surface)
         }
         .scrollContentBackground(.hidden)
         // Grey, not the black the rest of the chrome uses.
         //
-        // Home is black because its cards are the content — the dashboard is
-        // what you came for and the ground behind it should disappear. A
-        // settings screen is the opposite: the rows *are* the screen, and a grey
-        // ground is what makes a stack of them read as one list rather than as
-        // cards floating in a void.
+        // Black, the same as every other screen.
         //
-        // The rows lift a step to `tertiary` so they keep the same separation
-        // from their background that they had on black.
-        .background(Color(.secondarySystemGroupedBackground))
+        // This reverses an earlier decision, and the argument it reverses was:
+        // the rows *are* a settings screen, so a grey ground makes a stack of
+        // them read as one list rather than as cards floating in a void. That's
+        // true in isolation. What it missed is that this screen is one tab away
+        // from three black ones — and a ground that changes when you move
+        // between tabs is more noticeable than any gain in how a list coheres.
+        //
+        // With the ground back to black the rows drop a step to `surface`,
+        // which is the card grey the rest of the app uses. Same separation,
+        // same colour as a card on Home.
+        .background(Theme.Palette.background)
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -119,10 +130,10 @@ struct VoicePicker: View {
             } footer: {
                 Text("Tap to hear it. The voice is the app — pick one you'd take instructions from.")
             }
-            .listRowBackground(Color(.tertiarySystemGroupedBackground))
+            .listRowBackground(Theme.Palette.surface)
         }
         .scrollContentBackground(.hidden)
-        .background(Color(.secondarySystemGroupedBackground))
+        .background(Theme.Palette.background)
         .navigationTitle("Cornerman voice")
         .navigationBarTitleDisplayMode(.inline)
         .task { await loadCornermanVoices() }
@@ -211,10 +222,10 @@ struct CommandsList: View {
             } footer: {
                 Text("Say them at any point in a session. He answers even with the coaching turned off.")
             }
-            .listRowBackground(Color(.tertiarySystemGroupedBackground))
+            .listRowBackground(Theme.Palette.surface)
         }
         .scrollContentBackground(.hidden)
-        .background(Color(.secondarySystemGroupedBackground))
+        .background(Theme.Palette.background)
         .navigationTitle("Voice commands")
         .navigationBarTitleDisplayMode(.inline)
     }

@@ -142,17 +142,37 @@ struct SummaryCards: View {
             Chart(stats.week) { entry in
                 BarMark(
                     x: .value("Day", entry.date, unit: .day),
-                    y: .value("Rounds", entry.rounds)
+                    y: .value("Rounds", entry.rounds),
+                    // Narrow, the way Health draws them: a thin stroke reads as
+                    // a reading taken at a moment, where a fat bar reads as a
+                    // block of time. Fixed rather than proportional so seven of
+                    // them don't fatten up on a Pro Max.
+                    width: .fixed(4)
                 )
-                .foregroundStyle(isHighlighted(entry.date) ? Theme.Palette.accent : Color(.quaternaryLabel))
+                // One hue for every bar, dimmed on the days the numbers above
+                // aren't describing. The highlight used to be a *different
+                // colour* — the accent — which made one bar look like a
+                // different kind of measurement rather than the same one,
+                // singled out.
+                .foregroundStyle(
+                    Theme.Palette.chart.opacity(isHighlighted(entry.date) ? 1 : 0.35)
+                )
                 .cornerRadius(2)
             }
             .chartYAxis(.hidden)
             // Narrow weekday initials, the same axis the hero carries. On a tile
             // this size they're the difference between a decorative squiggle and
             // a chart you can actually read a day off.
+            //
+            // The rules are new, and they're what makes a day with no training
+            // legible: without them an empty day is nothing at all, and the eye
+            // can't tell "no rounds" from "no column here". Health draws them
+            // for the same reason.
             .chartXAxis {
                 AxisMarks(values: .stride(by: .day)) { _ in
+                    AxisGridLine()
+                        .foregroundStyle(Theme.Palette.chartGrid)
+
                     AxisValueLabel(format: .dateTime.weekday(.narrow), centered: true)
                         .font(.system(size: 9))
                         .foregroundStyle(Color(.secondaryLabel))
