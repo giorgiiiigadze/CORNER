@@ -190,7 +190,10 @@ final class SessionEngine {
     /// running and a pause is the session stopped — five minutes of wrapping
     /// your hands mid-workout isn't time you trained, and counting it would mean
     /// the way to a big number is to walk away.
-    private var sessionSeconds = 0
+    /// Readable because the panel shows it: the elapsed clock sits beside the
+    /// controls the way a workout screen's does, counting the whole session
+    /// rather than the round. Still only written here.
+    private(set) var sessionSeconds = 0
 
     /// How often they stopped the clock. Evidence about the session's pitch —
     /// six pauses in six rounds is a session that was too much.

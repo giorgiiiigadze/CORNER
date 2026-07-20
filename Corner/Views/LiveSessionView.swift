@@ -35,21 +35,27 @@ struct LiveSessionView: View {
     }
 
     var body: some View {
-        ZStack {
-            VStack(spacing: Theme.Layout.stackSpacing) {
-                header
-                Spacer()
-                timer
-                Spacer()
-                focus
-                Spacer()
-                rounds
-                footer
-            }
-            .padding(Theme.Layout.gutter)
+        VStack(spacing: Theme.Layout.stackSpacing) {
+            Spacer()
+            timer
+            Spacer()
+            focus
+            Spacer()
+            rounds
+            heardTranscript
         }
-        .cornerBackground(screen)
-        .preferredColorScheme(.light)
+        .padding(Theme.Layout.gutter)
+        // The panel is an inset rather than an overlay, so the session's own
+        // content lays out in the space above it. Floated on top instead, the
+        // round bars ended up underneath it on the short phones — and the bars
+        // are the one thing here you're meant to catch without looking.
+        .safeAreaInset(edge: .bottom, spacing: 0) { panel }
+        // One background for every phase now. The state is in the clock and the
+        // bars; see `Theme.Live` for why it left the field.
+        .cornerBackground(Theme.Live.background)
+        // Pinned dark, the way it used to be pinned light: this screen is black
+        // whatever the phone is set to.
+        .preferredColorScheme(.dark)
         .persistentSystemOverlays(.hidden)
         .task { await startListening() }
         // The premise is that you never touch the phone — which means iOS never
@@ -81,13 +87,6 @@ struct LiveSessionView: View {
 
     /// Just the listening dot now — where you are in the session moved under the
     /// clock, where Strava puts the name of a number.
-    private var header: some View {
-        HStack {
-            Spacer()
-            listeningIndicator
-        }
-    }
-
     private var timer: some View {
         VStack(spacing: 2) {
             Text(clock)
@@ -150,7 +149,7 @@ struct LiveSessionView: View {
     private func bar(_ index: Int) -> some View {
         GeometryReader { proxy in
             ZStack(alignment: .leading) {
-                Capsule().fill(Theme.Live.primaryText.opacity(0.12))
+                Capsule().fill(Theme.Live.track)
                 Capsule()
                     .fill(fillColor(index))
                     .frame(width: proxy.size.width * fill(index))
@@ -187,18 +186,69 @@ struct LiveSessionView: View {
             .animation(.smooth(duration: 0.15), value: text)
     }
 
-    private var footer: some View {
-        VStack(spacing: 8) {
-            heardTranscript
+    /// The controls, in a panel that sits on the session rather than in it.
+    ///
+    /// Modelled on the Workout app's: a rounded slab lifted off the black, the
+    /// elapsed clock across the top, the buttons under it. The reason it's a
+    /// panel and not a row of text buttons is that this screen is operated by
+    /// voice and glanced at from three metres — when someone does reach for it,
+    /// they're reaching without looking, and a 72pt circle in a fixed place is
+    /// findable that way where a footnote-sized "End" never was.
+    ///
+    /// It carries the elapsed *session*, not the round. The round is the hero
+    /// clock in the middle of the screen; repeating it here would spend the
+    /// panel's one number on something already the largest thing in the room.
+    private var panel: some View {
+        VStack(spacing: 14) {
+            panelClock
             controls
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 14)
+        .padding(.bottom, 18)
+        .background(
+            Theme.Live.panel,
+            in: .rect(cornerRadius: 34, style: .continuous)
+        )
+        .padding(.horizontal, 10)
+        // Clear of the home indicator, which sits directly under this.
+        .padding(.bottom, 8)
+    }
+
+    /// Left to right: whether it's listening, how long you've been at it, where
+    /// you are in the session. The three things the big type doesn't say.
+    private var panelClock: some View {
+        HStack {
+            listeningIndicator
+                .frame(width: 44, alignment: .leading)
+
+            Spacer()
+
+            Text(elapsed)
+                .font(.system(size: 40, weight: .semibold, design: .rounded).monospacedDigit())
+                .foregroundStyle(timerColor)
+                .contentTransition(.numericText())
+                .animation(.smooth(duration: 0.2), value: engine.sessionSeconds)
+
+            Spacer()
+
+            Text(engine.round.map { "\($0.index)/\(engine.totalRounds)" } ?? "—")
+                .font(Theme.Fonts.caption.monospacedDigit())
+                .foregroundStyle(Theme.Live.secondaryText)
+                .frame(width: 44, alignment: .trailing)
         }
     }
 
     /// M1 instrumentation, not a design element. Seeing "it heard 'slow her'"
     /// instead of "nothing happened" is the difference between a measurement and a
     /// shrug. Delete this once the gym test is passed.
+    ///
+    /// Outside the panel rather than in it: the panel is a designed object with
+    /// three things in it, and a monospaced debug line sitting inside the slab
+    /// read as damage rather than as a readout. Above it, it's plainly a note
+    /// laid on the screen — which is what it is.
     private var heardTranscript: some View {
-        Text(engine.lastHeard ?? "—")
+        Text(engine.lastHeard ?? " ")
             .font(.caption.monospaced())
             .foregroundStyle(Theme.Live.secondaryText.opacity(0.7))
             .lineLimit(1)
@@ -207,20 +257,75 @@ struct LiveSessionView: View {
             .animation(.default, value: engine.lastHeard)
     }
 
+    /// End, the primary, and next round — in the Workout app's arrangement, and
+    /// for its reason: the destructive one is furthest from the thumb that's
+    /// reaching for the big one in the middle.
+    ///
+    /// Every one of these is something you can already say out loud, and saying
+    /// it is still the intended way. These are for the times the gym is too loud
+    /// to be heard, which is the failure mode a voice-first screen has to have
+    /// an answer for.
     private var controls: some View {
-        HStack {
-            if engine.isPaused {
-                Label("Paused — say \"resume\"", systemImage: "pause.fill")
-                    .font(.footnote.weight(.medium))
-                    .foregroundStyle(Theme.Live.secondaryText)
-            }
-            Spacer()
-            Button("End") {
+        HStack(spacing: 22) {
+            // Grey, not red, and that's a change forced by the black screen:
+            // red is the resting clock now, so a red End button sitting six
+            // inches under a red timer read as part of the state rather than as
+            // a control. Recessive suits it anyway — this is the button you use
+            // once, at the end, and never in a hurry.
+            circleButton("xmark", tint: Theme.Live.secondaryText, size: 60) {
                 Task { await finish() }
             }
-            .font(.footnote.weight(.medium))
-            .foregroundStyle(Theme.Live.secondaryText)
-            .buttonStyle(.plain)
+            .accessibilityLabel("End session")
+
+            circleButton(primaryIcon, tint: Theme.Live.primaryText, size: 76) {
+                Task { await engine.handle(primaryCommand) }
+            }
+            .accessibilityLabel(primaryLabel)
+
+            circleButton("forward.end.fill", tint: Theme.Live.primaryText, size: 60) {
+                Task { await engine.handle(.nextRound) }
+            }
+            // Nothing to skip to before the first bell, and skipping the last
+            // round is what the End button is for.
+            .disabled(engine.phase == .idle)
+            .accessibilityLabel("Next round")
+        }
+    }
+
+    private func circleButton(
+        _ icon: String,
+        tint: Color,
+        size: CGFloat,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Circle()
+                .fill(Theme.Live.control)
+                .frame(width: size, height: size)
+                .overlay {
+                    Image(systemName: icon)
+                        .font(.system(size: size * 0.36, weight: .semibold))
+                        .foregroundStyle(tint)
+                }
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// Play before the bell and after a pause, pause while it's running. The one
+    /// button says what tapping it will do, not what the session is doing.
+    private var primaryIcon: String {
+        engine.phase == .idle || engine.isPaused ? "play.fill" : "pause.fill"
+    }
+
+    private var primaryCommand: VoiceCommand {
+        if engine.phase == .idle { .start } else if engine.isPaused { .resume } else { .pause }
+    }
+
+    private var primaryLabel: String {
+        switch primaryCommand {
+        case .start: "Start session"
+        case .resume: "Resume"
+        default: "Pause"
         }
     }
 
@@ -263,23 +368,17 @@ struct LiveSessionView: View {
         return String(format: "%d:%02d", total / 60, total % 60)
     }
 
+    /// The whole session so far, zero-padded so the panel's number doesn't
+    /// change width every time the tens column rolls.
+    private var elapsed: String {
+        let total = max(0, engine.sessionSeconds)
+        return String(format: "%02d:%02d", total / 60, total % 60)
+    }
+
     /// Green while the round runs, red while it doesn't. The clock and the bar
     /// below it both read from this, so they can't drift apart.
     private var phaseColor: Color {
         engine.isResting ? Theme.Live.resting : Theme.Live.work
-    }
-
-    /// The background says the same thing the clock does, one state per phase.
-    ///
-    /// The green lands exactly on the bell — not on the opener before it — so
-    /// the screen turning colour means "start punching" and nothing else, which
-    /// is what the bell means too.
-    private var screen: Color {
-        switch engine.phase {
-        case .active: Theme.Live.workBackground
-        case .resting: Theme.Live.restBackground
-        case .idle, .announcing, .debrief: Theme.Live.background
-        }
     }
 
     /// Coloured only while a clock is meaningfully running. Idle and the debrief

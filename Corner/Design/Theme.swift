@@ -54,61 +54,66 @@ enum Theme {
         static let hairline = Color(.separator)
     }
 
-    /// The live timer. Light while the rest of the app is dark, and its own
-    /// palette entirely: it's read across a gym, out of the corner of an eye,
-    /// from a phone propped on a bench — not held. Every value here answers to
-    /// that, not to taste.
+    /// The live timer. Black, and its own palette entirely: it's read across a
+    /// gym, out of the corner of an eye, from a phone propped on a bench — not
+    /// held. Every value here answers to that, not to taste.
     ///
-    /// Nothing in here aliases `Palette` any more, and that's deliberate rather
-    /// than duplication. These three used to borrow the chrome's values on the
-    /// grounds that the app was "one thing" — but the chrome is dark now, and
-    /// inheriting would have turned the work and rest washes into near-black
-    /// backgrounds carrying dark green and dark red type, which is the one
-    /// combination this screen cannot survive. It's pinned to its own literals
-    /// so a future change to the chrome can't reach in here again.
+    /// **This screen used to be light, and the reversal is worth recording.**
+    /// The pale version's argument was that a bright screen carries further
+    /// across a room, and it does — but it was carrying a *wash*: work and rest
+    /// were said by tinting the whole background pale green or pale red, which
+    /// meant every value here was tuned to survive sitting on a tint. That's why
+    /// the clock was a dark bottle green, and why an off-white background needed
+    /// its own near-black ink.
+    ///
+    /// Black moves the state off the field and into the marks. The clock and the
+    /// round bars carry the colour now, against a background that never changes,
+    /// which is how the Fitness and Workout screens this is modelled on do it —
+    /// and a saturated green numeral on black is louder at three metres than a
+    /// dark one on a pale wash ever was. The washes are gone rather than
+    /// darkened: a deep green field behind a green clock is the one thing that
+    /// would undo the contrast this buys.
+    ///
+    /// Nothing in here aliases `Palette`, which is deliberate rather than
+    /// duplication. The chrome is grouped-list dark; this is true black with its
+    /// own lifted greens and reds, and the two have drifted apart before. Pinned
+    /// to literals so a change to the chrome can't reach in here again.
     enum Live {
-        /// Before the first bell, and after the last. The off-white the chrome
-        /// used to be, kept because the pale washes below are built to sit
-        /// against it.
-        static let background = Color(red: 0.973, green: 0.969, blue: 0.961)
+        /// Every phase, start to finish. It does not change — the marks on it do.
+        static let background = Color.black
 
-        /// The screen while the round runs. Pale on purpose: it has to carry
-        /// near-black type and a dark green clock, so it's a wash of colour
-        /// rather than a green — enough to answer "is it on?" from the corner of
-        /// an eye, not enough to fight the numbers sitting on it.
-        static let workBackground = Color(red: 0.87, green: 0.94, blue: 0.87)
+        /// The floating control panel at the foot of the screen. Lifted off the
+        /// black by enough to read as an object sitting on top of the session
+        /// rather than a region of it, which is the whole idea it borrows.
+        static let panel = Color(white: 0.11)
 
-        static let accent = Palette.accent
+        /// The circular controls inside the panel, lifted again off the panel by
+        /// the same step the panel is lifted off the background. Two steps of one
+        /// size, so the stack reads as depth rather than three arbitrary greys.
+        static let control = Color(white: 0.19)
 
-        /// The clock while the round is running, and the bar filling under it.
-        /// Dark for a green, because it has to hold up on a pale wash — the
-        /// bright greens read as mint at three metres and vanish.
-        static let work = Color(red: 0.10, green: 0.52, blue: 0.24)
+        static let accent = Palette.accentLight
 
-        /// `work`, lifted to survive the dark chrome.
+        /// The clock while the round is running, and the bars filling under it.
         ///
-        /// The same green in the same family, and it has to be a second value
-        /// rather than a reuse: `work` is dark *on purpose*, tuned against a
-        /// near-white wash, and dropping it onto a `#1C1C1E` card leaves a
-        /// bottle-green smudge you can't read at arm's length — the exact
-        /// failure `work`'s own comment describes, mirrored. This is what the
-        /// chrome uses when it wants to say "trained".
-        static let workOnDark = Color(red: 0.20, green: 0.78, blue: 0.35)
+        /// Saturated and light for a green, which is the exact inverse of what
+        /// this value used to be: on black, the dark bottle green it was tuned to
+        /// be on a pale wash disappears into the background at any distance.
+        static let work = Color(red: 0.20, green: 0.78, blue: 0.35)
 
-        /// The clock while resting. Built to the same recipe as `work` and for
-        /// the same reason: dark, because it sits on a pale background too.
-        static let resting = Color(red: 0.70, green: 0.12, blue: 0.10)
+        /// The clock while resting. Same recipe as `work`, same reason — lifted
+        /// to survive black, not dropped to survive a pale wash.
+        static let resting = Color(red: 1.0, green: 0.27, blue: 0.24)
 
-        /// The screen while you breathe. The same wash as `workBackground` with
-        /// the red channel lifted instead of the green — the two states are one
-        /// construction in two hues, so neither can drift.
-        static let restBackground = Color(red: 0.94, green: 0.87, blue: 0.87)
+        /// One ink for every state now that the background never moves. Not
+        /// `Color(.label)`: that follows the system appearance, and this screen
+        /// is black whatever the phone is set to.
+        static let primaryText = Color.white
+        static let secondaryText = Color(white: 0.56)
 
-        /// One ink for every state now that all three backgrounds are pale. Not
-        /// `Color(.label)`: that inverts to white in dark mode, and these sit on
-        /// a screen that stays pale no matter what the system is doing.
-        static let primaryText = Color(white: 0.09)
-        static let secondaryText = Color(white: 0.45)
+        /// Unfilled round bars, and any rule that has to be visible without
+        /// being read.
+        static let track = Color(white: 0.22)
     }
 
     enum Layout {

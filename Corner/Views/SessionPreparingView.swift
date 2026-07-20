@@ -49,13 +49,12 @@ struct SessionPreparingView: View {
             footer
         }
         .padding(Theme.Layout.gutter)
-        // The live screen's idle wash, and the same modifier it uses — so the
+        // The live screen's background, and the same modifier it uses — so the
         // handover is one screen changing its mind, not a cut between two.
         .cornerBackground(Theme.Live.background)
-        // Pinned light like the screen it becomes. Without this the wait is dark
-        // and the session it turns into is pale, which is a flash in the face in
-        // a dim gym.
-        .preferredColorScheme(.light)
+        // Pinned to match the screen it becomes, which is black whatever the
+        // phone is set to.
+        .preferredColorScheme(.dark)
         .onAppear { breathing = true }
     }
 
