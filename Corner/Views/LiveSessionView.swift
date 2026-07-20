@@ -200,19 +200,32 @@ struct LiveSessionView: View {
     /// panel's one number on something already the largest thing in the room.
     private var panel: some View {
         VStack(spacing: 14) {
+            grabber
             panelClock
             controls
         }
         .padding(.horizontal, 20)
-        .padding(.top, 14)
+        .padding(.top, 10)
         .padding(.bottom, 18)
         .background(
             Theme.Live.panel,
-            in: .rect(cornerRadius: 34, style: .continuous)
+            in: .rect(cornerRadius: 42, style: .continuous)
         )
         .padding(.horizontal, 10)
         // Clear of the home indicator, which sits directly under this.
         .padding(.bottom, 8)
+    }
+
+    /// The grab handle across the top of the panel.
+    ///
+    /// Purely a shape — nothing here is draggable. It's what tells you the slab
+    /// is an object resting on the screen rather than a band painted across the
+    /// bottom of it, and without it the panel reads as the screen simply being a
+    /// different colour down there.
+    private var grabber: some View {
+        Capsule()
+            .fill(Theme.Live.secondaryText.opacity(0.5))
+            .frame(width: 36, height: 5)
     }
 
     /// Left to right: whether it's listening, how long you've been at it, where
@@ -266,23 +279,23 @@ struct LiveSessionView: View {
     /// to be heard, which is the failure mode a voice-first screen has to have
     /// an answer for.
     private var controls: some View {
-        HStack(spacing: 22) {
+        HStack(spacing: 18) {
             // Grey, not red, and that's a change forced by the black screen:
             // red is the resting clock now, so a red End button sitting six
             // inches under a red timer read as part of the state rather than as
             // a control. Recessive suits it anyway — this is the button you use
             // once, at the end, and never in a hurry.
-            circleButton("xmark", tint: Theme.Live.secondaryText, size: 60) {
+            circleButton("xmark", tint: Theme.Live.secondaryText, size: Self.secondarySize) {
                 Task { await finish() }
             }
             .accessibilityLabel("End session")
 
-            circleButton(primaryIcon, tint: Theme.Live.primaryText, size: 76) {
+            circleButton(primaryIcon, tint: Theme.Live.primaryText, size: Self.primarySize) {
                 Task { await engine.handle(primaryCommand) }
             }
             .accessibilityLabel(primaryLabel)
 
-            circleButton("forward.end.fill", tint: Theme.Live.primaryText, size: 60) {
+            circleButton("forward.end.fill", tint: Theme.Live.primaryText, size: Self.secondarySize) {
                 Task { await engine.handle(.nextRound) }
             }
             // Nothing to skip to before the first bell, and skipping the last
@@ -291,6 +304,16 @@ struct LiveSessionView: View {
             .accessibilityLabel("Next round")
         }
     }
+
+    /// Start/pause, and it's half again the size of the other two.
+    ///
+    /// The size difference is the hierarchy — there's no colour doing that job
+    /// here, since red belongs to the resting clock and everything else in the
+    /// panel is grey on grey. It's also the one you reach for with the phone on
+    /// a bench and your hands wrapped, which is an argument for the largest
+    /// target the panel can hold.
+    private static let primarySize: CGFloat = 110
+    private static let secondarySize: CGFloat = 74
 
     private func circleButton(
         _ icon: String,

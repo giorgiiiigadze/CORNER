@@ -82,15 +82,22 @@ enum Theme {
         /// Every phase, start to finish. It does not change — the marks on it do.
         static let background = Color.black
 
-        /// The floating control panel at the foot of the screen. Lifted off the
-        /// black by enough to read as an object sitting on top of the session
-        /// rather than a region of it, which is the whole idea it borrows.
-        static let panel = Color(white: 0.11)
+        /// The floating control panel at the foot of the screen.
+        ///
+        /// `#1C1C1E`, which is what `Palette.surface` resolves to in the dark —
+        /// so the panel is the same grey as a card on Home, and the app has one
+        /// colour for "a surface with things on it" rather than two that nearly
+        /// match. Written as a literal rather than reaching for
+        /// `secondarySystemGroupedBackground` because everything in `Live` is
+        /// pinned: the semantic colour follows the system appearance and this
+        /// screen doesn't.
+        static let panel = Color(red: 0.110, green: 0.110, blue: 0.118)
 
-        /// The circular controls inside the panel, lifted again off the panel by
-        /// the same step the panel is lifted off the background. Two steps of one
-        /// size, so the stack reads as depth rather than three arbitrary greys.
-        static let control = Color(white: 0.19)
+        /// The circular controls inside the panel. `#2A2A2B` — lifted off the
+        /// panel by about the step the panel is lifted off the black, so the
+        /// stack reads as two even steps of depth rather than three arbitrary
+        /// greys.
+        static let control = Color(red: 0.165, green: 0.165, blue: 0.169)
 
         static let accent = Palette.accentLight
 
