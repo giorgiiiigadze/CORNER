@@ -24,6 +24,10 @@ struct SessionPreparingView: View {
     /// that it's what's being written.
     let request: SessionRequest
 
+    /// What this wait is for. A written session and a resumed one both land
+    /// here, and they are waiting on different things.
+    var headline = "Writing your session"
+
     /// Set when the write failed. The screen stays up and says so — dropping
     /// straight back to Home would look identical to the tap not registering,
     /// which is the exact confusion this screen exists to end.
@@ -71,7 +75,7 @@ struct SessionPreparingView: View {
 
     private var waiting: some View {
         VStack(spacing: 10) {
-            Text("Writing your session")
+            Text(headline)
                 .font(Theme.Fonts.focus)
                 .foregroundStyle(Theme.Live.primaryText)
                 .multilineTextAlignment(.center)

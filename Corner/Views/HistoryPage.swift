@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Every session you finished, newest first.
+/// Every session you finished, newest first — and the one you haven't.
 ///
 /// Its own page now rather than a section at the bottom of home: this is the
 /// evidence behind "the cornerman learns from you", and evidence you have to
@@ -13,26 +13,58 @@ struct HistoryPage: View {
     let history: [TrainingRecord]
     let onDelete: (IndexSet) -> Void
 
+    /// Today's session if it was left partway through, and the way back into it.
+    ///
+    /// Here as well as on Home because this is the tab you open to ask "what
+    /// have I been doing" — and a session you walked away from an hour ago is
+    /// the truest answer to that, while being the one thing on the page you can
+    /// still change. It was only ever on Home, which meant the screen devoted to
+    /// your sessions was the one screen that didn't mention the live one.
+    var unfinished: UnfinishedSession?
+    var onResume: () -> Void = {}
+
     var body: some View {
-        if history.isEmpty {
+        if history.isEmpty && unfinished == nil {
             empty
         } else {
-            // The dashboard lives on home. This page is the evidence underneath
-            // it — every session, one line each, deletable.
             List {
-                ForEach(history) { record in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(record.title)
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(Theme.Palette.primaryText)
-                        Text(detail(for: record))
-                            .font(.caption)
-                            .foregroundStyle(Theme.Palette.secondaryText)
+                if let unfinished {
+                    Section {
+                        ResumeCard(session: unfinished, onResume: onResume)
+                            .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
                     }
+                    .listSectionMargins(.horizontal, 16)
                 }
-                .onDelete(perform: onDelete)
+
+                // The same card Home draws, not a two-line row that happens to
+                // name the same session. This page used to be a table — title
+                // and a grey subtitle — which quietly said the sessions here
+                // were an index of the ones on Home rather than the same
+                // objects.
+                Section {
+                    ForEach(history) { record in
+                        SessionCard(record: record, stamp: .relativeDay)
+                            // Zero leading and trailing: the section margin does
+                            // the insetting, and a row inset is charged on top of
+                            // it — which would leave these cards narrower than
+                            // the identical ones on Home.
+                            .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                    }
+                    // On the `ForEach` over `history` alone, which is what keeps
+                    // the index it hands back meaningful: the resume card is its
+                    // own section, so it can't shift these by one and delete the
+                    // wrong session.
+                    .onDelete(perform: onDelete)
+                }
+                .listSectionMargins(.horizontal, 16)
             }
+            .listStyle(.plain)
             .scrollContentBackground(.hidden)
+            .background(Theme.Palette.background)
         }
     }
 
@@ -51,9 +83,5 @@ struct HistoryPage: View {
             Spacer()
         }
         .frame(maxWidth: .infinity)
-    }
-
-    private func detail(for record: TrainingRecord) -> String {
-        "\(record.roundsCompleted)/\(record.roundsPlanned) rounds \u{00B7} \(record.date.formatted(.relative(presentation: .named)))"
     }
 }

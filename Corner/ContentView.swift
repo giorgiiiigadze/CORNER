@@ -69,6 +69,17 @@ struct ContentView: View {
     /// The day the dashboard is showing, or nil for running totals.
     @State private var selectedDay: Date?
 
+    /// The plan the fighter has waved off Home, by session id.
+    ///
+    /// One id rather than a set: only today's plan is ever shown, and tomorrow's
+    /// carries a different id, so a single slot is the whole of what needs
+    /// remembering. Persisted because a banner you dismissed coming back on
+    /// relaunch is the same annoyance a second time.
+    ///
+    /// Home only. History still lists it — dismissing is "not now", not "delete
+    /// this", and the one place that holds every session should hold this one.
+    @AppStorage("dismissedPlanID") private var dismissedPlanID: String = ""
+
     @Environment(AuthController.self) private var auth
 
     private let audioSession = AudioSessionController()
@@ -97,7 +108,16 @@ struct ContentView: View {
                 destination(.coach) { CoachPage(profile: profile) }
             }
             Tab(Page.history.title, systemImage: Page.history.icon, value: .history) {
-                destination(.history) { HistoryPage(history: history, onDelete: delete) }
+                destination(.history) {
+                    HistoryPage(
+                        history: history,
+                        onDelete: delete,
+                        unfinished: unfinishedToday.map {
+                            .init(title: $0.plan.focus, done: $0.done, total: $0.plan.roundCount)
+                        },
+                        onResume: resumeToday
+                    )
+                }
             }
             Tab(Page.profile.title, systemImage: Page.profile.icon, value: .profile) {
                 destination(.profile) { ProfilePage(history: history) }
@@ -292,15 +312,25 @@ struct ContentView: View {
         let remaining = Array(session.rounds.dropFirst(done))
         guard !remaining.isEmpty else { return }
 
+        // Nothing trained yet means this isn't a resume at all — it's the first
+        // start of a session that was written and walked away from. It gets the
+        // intro and it says so on the way in; a fighter who never heard "here's
+        // what today is for" shouldn't be told we're picking up where they left
+        // off.
+        let isFirstStart = done == 0
+        live = SessionLaunch(
+            headline: isFirstStart ? "Starting your session" : "Picking up where you left off"
+        )
+
         Task {
             await launch(
                 Session(
                     id: session.id,
                     title: session.title,
-                    // No intro on a resume. It's the "here's what today is for"
-                    // line, and you've already heard it — replaying it would
-                    // make the second half sound like a different workout.
-                    intro: nil,
+                    // No intro on a real resume. It's the "here's what today is
+                    // for" line, and you've already heard it — replaying it
+                    // would make the second half sound like a different workout.
+                    intro: isFirstStart ? session.intro : nil,
                     rounds: remaining
                 )
             )
@@ -437,6 +467,28 @@ struct ContentView: View {
             }
             .listSectionMargins(.horizontal, 16)
 
+            // Above the dashboard, under the calendar. It's the only thing on
+            // Home with a clock running on it — the numbers below will say the
+            // same thing in ten minutes, and this won't.
+            if let today = unfinishedToday, today.plan.sessionID != dismissedPlanID {
+                let unfinished = UnfinishedSession(
+                    title: today.plan.focus,
+                    done: today.done,
+                    total: today.plan.roundCount
+                )
+                Section {
+                    LiveSessionIndicator(
+                        session: unfinished,
+                        onResume: resumeToday,
+                        onDismiss: { dismissedPlanID = today.plan.sessionID }
+                    )
+                        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 8, trailing: 0))
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                }
+                .listSectionMargins(.horizontal, 16)
+            }
+
             // Directly under the card rather than at the foot of the screen: a
             // failure to write today's session is about the card, and an error
             // parked below the dashboard is an error nobody reads.
@@ -460,13 +512,7 @@ struct ContentView: View {
                 // list of cards.
                 VStack(spacing: 30) {
                     SummaryCards(stats: TrainingStats.from(history: history), day: selectedDayStats)
-                    RecentSessions(
-                        history: history,
-                        unfinished: unfinishedToday.map {
-                            .init(title: $0.plan.focus, done: $0.done, total: $0.plan.roundCount)
-                        },
-                        onResume: resumeToday
-                    )
+                    RecentSessions(history: history)
                 }
                     // Zero, not 16. The list style already insets the section,
                     // and any row inset is charged on top of that — the cards
@@ -560,7 +606,11 @@ struct ContentView: View {
                 record(summary)
             }
         } else {
-            SessionPreparingView(request: request, problem: live?.problem) {
+            SessionPreparingView(
+                request: request,
+                headline: live?.headline ?? "Writing your session",
+                problem: live?.problem
+            ) {
                 cancelLaunch()
             }
         }
@@ -615,6 +665,16 @@ struct ContentView: View {
     /// an alert raised behind it is an alert nobody can see, and the fighter is
     /// left looking at "Writing your session" forever.
     private func launch(_ session: Session) async {
+        // Every path through here needs a screen to land on, and only
+        // `generate()` opens one — so a resume used to run this whole method
+        // against a nil `live`, where `live?.engine =` below is a silent no-op.
+        // Tapping Resume did nothing at all, with no error and nothing in the
+        // log: the session was built and immediately dropped.
+        //
+        // Created here rather than at each call site so a third caller can't
+        // reintroduce it.
+        if live == nil { live = SessionLaunch(headline: "Picking up where you left off") }
+
         guard await audioSession.requestMicrophoneAccess() else {
             live?.problem = "Microphone access is required. Enable it in Settings."
             return
@@ -683,6 +743,12 @@ struct ContentView: View {
 /// dismiss-and-represent flash this exists to avoid.
 struct SessionLaunch: Identifiable {
     let id = UUID()
+
+    /// What the waiting screen says it's doing. A written session and a resumed
+    /// one both wait here, and only one of them is being written — "Writing your
+    /// session" over a session that was written an hour ago is a small lie the
+    /// fighter can catch.
+    var headline = "Writing your session"
 
     /// Nil while the plan is still being written. Set once, when it lands.
     var engine: SessionEngine?
