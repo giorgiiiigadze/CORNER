@@ -215,7 +215,7 @@ struct SessionAccessory: View {
                     // what the session is, and the count is a detail for the
                     // History card, not for a glance from another tab.
                     Text(hasStarted ? "Session unfinished" : "Ready to start")
-                        .font(.headline)
+                        .font(.subheadline.weight(.medium))
                         .lineLimit(1)
 
                     Spacer(minLength: 0)
@@ -243,18 +243,13 @@ struct SessionAccessory: View {
         .padding(.horizontal, 16)
     }
 
-    /// The leading square. A filled rounded box with the brand mark in it,
-    /// sized to the album-art slot Apple Music uses — the same footprint a real
-    /// session thumbnail would take if there's ever one to show.
+    /// The leading square. A plain filled box, no mark inside — the album-art
+    /// slot Apple Music keeps, the same footprint a real session thumbnail would
+    /// take if there's ever one to show. #FF0436.
     private var artwork: some View {
         RoundedRectangle(cornerRadius: 7, style: .continuous)
-            .fill(Theme.Palette.accent)
+            .fill(Color(red: 1.0, green: 0.016, blue: 0.212))
             .frame(width: 30, height: 30)
-            .overlay {
-                Image(systemName: "figure.boxing")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(.white)
-            }
     }
 }
 

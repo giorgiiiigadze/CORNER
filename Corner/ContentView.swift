@@ -84,6 +84,10 @@ struct ContentView: View {
 
     @Environment(AuthController.self) private var auth
 
+    /// The initials disc, rasterised for the profile tab. Nil until it's built,
+    /// and nil when there's no identity — the tab shows the person icon then.
+    @State private var profileTabIcon: Image?
+
     private let audioSession = AudioSessionController()
 
     /// Built fresh from real history every time it's read — what they drilled,
@@ -118,8 +122,24 @@ struct ContentView: View {
                     )
                 }
             }
-            Tab(Page.profile.title, systemImage: Page.profile.icon, value: .profile) {
+            // The profile tab wears the user's own mark, the way X puts your
+            // avatar in the tab bar rather than a generic silhouette. It's the
+            // initials disc — there's no uploaded photo in the app yet — and it
+            // falls back to the person icon when there's no identity to build one
+            // from. A tab item has to be an `Image`, so the disc is rasterised
+            // into `profileTabIcon` and refreshed only when the identity changes.
+            Tab(value: Page.profile) {
                 destination(.profile) { ProfilePage(history: history) }
+            } label: {
+                Label {
+                    Text(Page.profile.title)
+                } icon: {
+                    if let profileTabIcon {
+                        profileTabIcon
+                    } else {
+                        Image(systemName: Page.profile.icon)
+                    }
+                }
             }
 
             // The detached button beside the bar, and it's a real tab role
@@ -157,34 +177,36 @@ struct ContentView: View {
             // the first one back.
             showingSetup = true
         }
-        // The open session lives here now — the iOS 26 accessory slot above the
-        // tab bar, where Apple Music keeps Now Playing. It shows on every tab
-        // while there's a session to resume and vanishes the moment there
-        // isn't: an empty accessory closure is how the system is told to hide
-        // it, so the `if` with no `else` is load-bearing, not laziness.
+        // The open session lives in the iOS 26 accessory slot above the tab bar,
+        // where Apple Music keeps Now Playing — present on every tab while
+        // there's a session to resume, and *gone entirely* when there isn't.
+        //
+        // The modifier is applied conditionally rather than always-on with an
+        // empty closure: returning no content from `tabViewBottomAccessory`
+        // doesn't reliably collapse the bar — it can leave an empty glass
+        // sliver above the tab bar. Only not applying the modifier at all
+        // guarantees nothing is there. See `sessionAccessory` below.
         //
         // This replaces the green pill that sat on Home. A session in progress
         // isn't a Home thing; it's a state the whole app is in, and the
         // accessory is the one piece of chrome that's present regardless of
         // which tab you're on.
-        .tabViewBottomAccessory {
-            if let today = unfinishedToday {
-                SessionAccessory(
-                    session: UnfinishedSession(
-                        title: today.plan.focus,
-                        done: today.done,
-                        total: today.plan.roundCount
-                    ),
-                    onResume: resumeToday
-                )
-            }
-        }
-        // All four tabs, all the time. The iOS 26 minimize gesture collapses the
-        // bar to the selected tab alone as you scroll, which reads as the other
-        // three having disappeared — and this app's whole navigation is four
-        // destinations wide. Trading that legibility for a few points of list
-        // height isn't worth it here.
-        .tabBarMinimizeBehavior(.never)
+        .sessionAccessory(
+            unfinishedToday.map {
+                UnfinishedSession(title: $0.plan.focus, done: $0.done, total: $0.plan.roundCount)
+            },
+            onResume: resumeToday
+        )
+        // Shrinks to the selected tab as you scroll down, and the session
+        // accessory reflows inline with it — the Apple Music gesture, where the
+        // Now Playing bar tucks into the minimised tab bar. The system does all
+        // of this once the behaviour is set; the accessory just goes along.
+        //
+        // This was `.never` while there were four tabs — collapsing to one read
+        // as the other three vanishing, and the navigation was too wide to lose.
+        // At three it's the standard iOS 26 behaviour and worth the reclaimed
+        // list height.
+        .tabBarMinimizeBehavior(.onScrollDown)
         // White for the selected tab, not the brand red.
         //
         // The accent had four jobs on this screen — the trained ring, the
@@ -199,6 +221,13 @@ struct ContentView: View {
         // Home with the tab bar behind it — not over the splash or the sign-in
         // screen, where it would be explaining a screen they haven't reached.
         .task(id: isLaunching) { await offerWelcome() }
+        // Rebuild the tab avatar only when the identity behind it changes — a
+        // new account, or a name arriving from the profile fetch. A signature
+        // rather than the whole `auth`, so an unrelated auth change doesn't
+        // re-rasterise the disc.
+        .task(id: [auth.userID, auth.email, auth.displayName]) {
+            profileTabIcon = renderProfileTabIcon()
+        }
         .sheet(isPresented: $showingWelcome) {
             WelcomeSheet {
                 hasSeenWelcome = true
@@ -342,6 +371,39 @@ struct ContentView: View {
     /// engine being taught to start midway — `Session` is a plain struct, so the
     /// remainder *is* a session, and the engine runs it without knowing it's a
     /// second sitting.
+    /// Rasterises the initials disc for the profile tab, or nil to fall back to
+    /// the person icon.
+    ///
+    /// Nil when there's no email — no identity means no initials to draw, and
+    /// the generic silhouette is the honest thing to show. `.original` so the
+    /// disc keeps its colour rather than being flattened to the bar's tint the
+    /// way a template glyph would.
+    ///
+    /// `ImageRenderer` is main-actor work, which the caller already is. Scale is
+    /// fixed at 3 rather than read off a screen — the tab is small and 3x covers
+    /// every current device without reaching for a deprecated `UIScreen`.
+    @MainActor
+    private func renderProfileTabIcon() -> Image? {
+        guard let email = auth.email else { return nil }
+
+        let renderer = ImageRenderer(
+            content: InitialsAvatar(
+                name: auth.displayName,
+                email: email,
+                seed: auth.userID ?? email,
+                diameter: 26
+            )
+        )
+        renderer.scale = 3
+
+        // `.alwaysOriginal` on the UIImage, not `.original` on the SwiftUI
+        // Image — the tab bar tints at the UIKit layer, and only the UIImage's
+        // own rendering mode survives that. Set on the SwiftUI side alone, the
+        // coloured disc came back as a flat white circle.
+        guard let uiImage = renderer.uiImage else { return nil }
+        return Image(uiImage: uiImage.withRenderingMode(.alwaysOriginal))
+    }
+
     private func resumeToday() {
         guard let (plan, done) = unfinishedToday, let session = plan.session else { return }
 
@@ -802,6 +864,26 @@ struct SessionLaunch: Identifiable {
     /// Set if the session couldn't be started at all. Shown on the waiting
     /// screen, because by then it's the only screen there is.
     var problem: String?
+}
+
+private extension View {
+    /// Adds the session accessory to the tab bar, or nothing at all.
+    ///
+    /// Conditional at the *modifier* level, not the content level: with a
+    /// session it applies `tabViewBottomAccessory`, and without one it returns
+    /// the view untouched — so when there's nothing to resume the accessory
+    /// slot isn't in the hierarchy at all, rather than an empty bar the system
+    /// might still reserve space for.
+    @ViewBuilder
+    func sessionAccessory(_ session: UnfinishedSession?, onResume: @escaping () -> Void) -> some View {
+        if let session {
+            tabViewBottomAccessory {
+                SessionAccessory(session: session, onResume: onResume)
+            }
+        } else {
+            self
+        }
+    }
 }
 
 #Preview {
