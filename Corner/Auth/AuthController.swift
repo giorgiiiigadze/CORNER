@@ -1,4 +1,5 @@
 import Foundation
+import Network
 import os
 
 /// Who the backend thinks we are, and the token that proves it.
@@ -33,6 +34,18 @@ final class AuthController {
     /// user, so it survives a relaunch without a separate call to fetch it.
     private(set) var email: String?
 
+    /// The name from `public.profiles`, when there is one.
+    ///
+    /// Nil covers three different situations and the UI treats them the same,
+    /// which is right: nobody has set a name, the profiles table hasn't been
+    /// created yet, or the fetch hasn't come back. In all three the address is
+    /// what there is to show, and the avatar falls back to initials from it.
+    ///
+    /// Deliberately not blocking anything. It's fetched after the session is
+    /// already good, so a profiles table that doesn't exist — or a network that
+    /// doesn't answer — costs a log line and nothing else.
+    private(set) var displayName: String?
+
     /// The Supabase user id. What every stored session is keyed to, so a second
     /// person signing in on this phone sees their own history rather than the
     /// last person's.
@@ -48,6 +61,22 @@ final class AuthController {
 
     private let log = Logger(subsystem: "Giorgi.Corner", category: "auth")
 
+    /// Watches for the network coming back, and is only running while we're
+    /// signed in on a token we haven't been able to verify. See `restore`.
+    private var reconnectMonitor: NWPathMonitor?
+
+    /// Where the last-known identity is kept, so a launch with no signal can put
+    /// the app up instead of the sign-in screen.
+    ///
+    /// Not the Keychain — the *token* lives there because it's a credential;
+    /// these are just a user id and an address, and they need to be readable on
+    /// the offline path to key the local queries and label the screen. The token
+    /// stays the thing that proves who you are; this only remembers who that was.
+    private enum Cached {
+        static let userID = "auth.cached.userID"
+        static let email = "auth.cached.email"
+    }
+
     // MARK: - Session
 
     /// Called once at launch. Silent when there's nothing stored — a first run
@@ -62,14 +91,103 @@ final class AuthController {
         do {
             try await send(path: "token?grant_type=refresh_token", body: ["refresh_token": refresh])
             state = .signedIn
-        } catch {
-            // A refresh token that no longer works is a signed-out user, not a
-            // failure to report: it expires, and it's revoked when the account
-            // is deleted or the password changed elsewhere.
-            log.info("Stored session no longer valid — signing out")
+            // Detached, and after the state is already `signedIn`: the profile
+            // is decoration on a session that's good either way, and awaiting it
+            // here would hold the splash up for a name.
+            Task { await loadProfile() }
+        } catch is Failure {
+            // The *server* rejected the refresh token — this is the only failure
+            // that means signed-out. A refresh token expires, and it's revoked
+            // when the account is deleted or the password changed elsewhere;
+            // when that happens Supabase answers with a 4xx, which is the only
+            // thing that reaches this branch. Clearing here is correct.
+            log.info("Stored session rejected — signing out")
             TokenStore.clear()
+            clearCachedIdentity()
             state = .signedOut
+        } catch {
+            // We could not *reach* the server — no signal, airplane mode, a dead
+            // café wifi. The token is almost certainly fine; the one thing we
+            // must not do is throw it away, which is exactly the bug this fixes:
+            // an offline launch used to clear the token and drop to sign-in, and
+            // once it was cleared, getting signal back had nothing left to
+            // restore.
+            //
+            // So: keep the token, put the app up on the last-known identity, and
+            // watch for the network to come back to verify it. Signed-in offline
+            // works — history is local, and everything that needs the network
+            // already falls back on its own.
+            if let cachedID = UserDefaults.standard.string(forKey: Cached.userID) {
+                log.info("Offline at launch — restoring the last session and waiting for signal")
+                userID = cachedID
+                email = UserDefaults.standard.string(forKey: Cached.email)
+                state = .signedIn
+                waitForReconnect()
+            } else {
+                // Never got far enough to cache an identity. Nothing to show but
+                // sign-in — but the token is still there, so signing in will
+                // work the moment there's signal.
+                log.info("Offline at launch with no cached identity — sign-in until signal")
+                state = .signedOut
+            }
         }
+    }
+
+    /// Re-verifies the session the moment the network returns.
+    ///
+    /// Started only from the offline branch of `restore`, and torn down as soon
+    /// as it does its job — a monitor that outlived its reason to exist would be
+    /// a refresh firing on every wifi flicker for the rest of the app's life.
+    private func waitForReconnect() {
+        guard reconnectMonitor == nil else { return }
+
+        let monitor = NWPathMonitor()
+        reconnectMonitor = monitor
+        monitor.pathUpdateHandler = { [weak self] path in
+            guard path.status == .satisfied else { return }
+            Task { @MainActor in await self?.reconcile() }
+        }
+        monitor.start(queue: DispatchQueue(label: "Giorgi.Corner.auth.reconnect"))
+    }
+
+    private func stopWaiting() {
+        reconnectMonitor?.cancel()
+        reconnectMonitor = nil
+    }
+
+    /// One attempt to turn an unverified offline session into a verified one.
+    ///
+    /// Three outcomes, and each ends the wait or keeps it: the refresh succeeds
+    /// and we're fully signed in; the server rejects the token and we sign out
+    /// for real (the account was deleted or the password changed while we were
+    /// offline); or we still can't reach it, in which case we leave the monitor
+    /// running for the next time signal returns.
+    private func reconcile() async {
+        // Nothing to do if a live token already arrived by another path.
+        guard accessToken == nil, let refresh = TokenStore.read() else {
+            stopWaiting()
+            return
+        }
+
+        do {
+            try await send(path: "token?grant_type=refresh_token", body: ["refresh_token": refresh])
+            log.info("Signal returned — session verified")
+            stopWaiting()
+            Task { await loadProfile() }
+        } catch is Failure {
+            log.info("Signal returned — stored session was rejected, signing out")
+            TokenStore.clear()
+            clearCachedIdentity()
+            stopWaiting()
+            state = .signedOut
+        } catch {
+            // Still unreachable. Keep waiting.
+        }
+    }
+
+    private func clearCachedIdentity() {
+        UserDefaults.standard.removeObject(forKey: Cached.userID)
+        UserDefaults.standard.removeObject(forKey: Cached.email)
     }
 
     /// A live access token, refreshed if it's about to lapse.
@@ -102,13 +220,21 @@ final class AuthController {
     }
 
     func signOut() {
+        // A deliberate sign-out ends the offline-verify wait too — there's no
+        // session left to verify.
+        stopWaiting()
         TokenStore.clear()
+        clearCachedIdentity()
         accessToken = nil
         expiry = nil
         problem = nil
         notice = nil
         email = nil
         userID = nil
+        // Cleared with the rest of the identity. Left behind, the next person to
+        // sign in on this phone would be greeted by the last one's name until
+        // their own profile came back.
+        displayName = nil
         state = .signedOut
     }
 
@@ -147,6 +273,7 @@ final class AuthController {
             // inbox.
             if started {
                 state = .signedIn
+                Task { await loadProfile() }
             } else {
                 notice = "Check your email to confirm the account, then sign in."
             }
@@ -200,7 +327,71 @@ final class AuthController {
         accessToken = token
         expiry = Date(timeIntervalSinceNow: TimeInterval(session.expires_in ?? 3_600))
         TokenStore.save(refresh)
+
+        // The moment we're provably signed in, so the *next* launch can put the
+        // app up on this identity even with no signal. Written here rather than
+        // at the call sites because every path that reaches it — sign-in,
+        // sign-up, refresh, restore — is one where the token is now good.
+        UserDefaults.standard.set(userID, forKey: Cached.userID)
+        UserDefaults.standard.set(email, forKey: Cached.email)
         return true
+    }
+
+    /// Reads the row `public.profiles` holds for this account.
+    ///
+    /// Best-effort by construction. Every failure here — no table, no row, no
+    /// signal, RLS saying no — lands in the same place: `displayName` stays nil
+    /// and the app shows the address, which is what it showed before profiles
+    /// existed. That's why nothing awaits this and why it never sets `problem`:
+    /// a name is a nicety, and a fighter who can't train because a nicety
+    /// didn't load is a worse outcome than a fighter with no name on screen.
+    func loadProfile() async {
+        guard let userID, let token = await token() else { return }
+
+        var components = URLComponents(
+            url: Supabase.url.appending(path: "rest/v1/profiles"),
+            resolvingAgainstBaseURL: false
+        )
+        // `id=eq.<uid>` is PostgREST's filter syntax, and the RLS policy would
+        // narrow it to this row anyway — sending it explicitly means the server
+        // never assembles a result set we'd only throw away.
+        components?.queryItems = [
+            URLQueryItem(name: "id", value: "eq.\(userID)"),
+            URLQueryItem(name: "select", value: "display_name"),
+        ]
+
+        guard let url = components?.url else { return }
+
+        var request = URLRequest(url: url)
+        request.setValue(Supabase.publishableKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "authorization")
+        // One row or none, returned as an object rather than an array — saves
+        // unwrapping a single-element list on every read.
+        request.setValue("application/vnd.pgrst.object+json", forHTTPHeaderField: "accept")
+
+        struct Profile: Decodable { let display_name: String? }
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+
+            guard (200..<300).contains(status) else {
+                // 404 here means the table hasn't been created yet — see
+                // `supabase/migrations/0002_profiles.sql`, which has to be run
+                // by hand. Logged rather than surfaced: the app works without it.
+                log.info("No profile (\(status)) — falling back to the address")
+                return
+            }
+
+            let profile = try JSONDecoder().decode(Profile.self, from: data)
+            let trimmed = profile.display_name?.trimmingCharacters(in: .whitespacesAndNewlines)
+            // Empty is nil. A name someone cleared to blank is a name they
+            // haven't set, and the column being nullable is the whole reason
+            // `0002` distinguishes those — don't reintroduce "" downstream.
+            displayName = (trimmed?.isEmpty ?? true) ? nil : trimmed
+        } catch {
+            log.info("Profile fetch failed: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     /// Supabase's own wording where it has any, because it's better than
