@@ -69,17 +69,6 @@ struct ContentView: View {
     /// The day the dashboard is showing, or nil for running totals.
     @State private var selectedDay: Date?
 
-    /// The plan the fighter has waved off Home, by session id.
-    ///
-    /// One id rather than a set: only today's plan is ever shown, and tomorrow's
-    /// carries a different id, so a single slot is the whole of what needs
-    /// remembering. Persisted because a banner you dismissed coming back on
-    /// relaunch is the same annoyance a second time.
-    ///
-    /// Home only. History still lists it — dismissing is "not now", not "delete
-    /// this", and the one place that holds every session should hold this one.
-    @AppStorage("dismissedPlanID") private var dismissedPlanID: String = ""
-
     /// Whether the welcome sheet has been seen. Once, ever — not per account:
     /// it explains how the app works, and the app doesn't work differently for
     /// the second person to sign in on the same phone.
@@ -116,9 +105,6 @@ struct ContentView: View {
         TabView(selection: $page) {
             Tab(Page.home.title, systemImage: Page.home.icon, value: .home) {
                 destination(Page.home) { homePage }
-            }
-            Tab(Page.coach.title, systemImage: Page.coach.icon, value: .coach) {
-                destination(.coach) { CoachPage(profile: profile) }
             }
             Tab(Page.history.title, systemImage: Page.history.icon, value: .history) {
                 destination(.history) {
@@ -170,6 +156,28 @@ struct ContentView: View {
             // them, which meant a fighter who wanted a second session got given
             // the first one back.
             showingSetup = true
+        }
+        // The open session lives here now — the iOS 26 accessory slot above the
+        // tab bar, where Apple Music keeps Now Playing. It shows on every tab
+        // while there's a session to resume and vanishes the moment there
+        // isn't: an empty accessory closure is how the system is told to hide
+        // it, so the `if` with no `else` is load-bearing, not laziness.
+        //
+        // This replaces the green pill that sat on Home. A session in progress
+        // isn't a Home thing; it's a state the whole app is in, and the
+        // accessory is the one piece of chrome that's present regardless of
+        // which tab you're on.
+        .tabViewBottomAccessory {
+            if let today = unfinishedToday {
+                SessionAccessory(
+                    session: UnfinishedSession(
+                        title: today.plan.focus,
+                        done: today.done,
+                        total: today.plan.roundCount
+                    ),
+                    onResume: resumeToday
+                )
+            }
         }
         // All four tabs, all the time. The iOS 26 minimize gesture collapses the
         // bar to the selected tab alone as you scroll, which reads as the other
@@ -495,27 +503,10 @@ struct ContentView: View {
             }
             .listSectionMargins(.horizontal, 16)
 
-            // Above the dashboard, under the calendar. It's the only thing on
-            // Home with a clock running on it — the numbers below will say the
-            // same thing in ten minutes, and this won't.
-            if let today = unfinishedToday, today.plan.sessionID != dismissedPlanID {
-                let unfinished = UnfinishedSession(
-                    title: today.plan.focus,
-                    done: today.done,
-                    total: today.plan.roundCount
-                )
-                Section {
-                    LiveSessionIndicator(
-                        session: unfinished,
-                        onResume: resumeToday,
-                        onDismiss: { dismissedPlanID = today.plan.sessionID }
-                    )
-                        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 8, trailing: 0))
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
-                }
-                .listSectionMargins(.horizontal, 16)
-            }
+            // The open session used to sit here, above the dashboard. It moved
+            // to the tab bar accessory — see `tabViewBottomAccessory` above —
+            // because a session in progress isn't a Home thing, it's a state
+            // the whole app is in, and it should be reachable from any tab.
 
             // Directly under the card rather than at the foot of the screen: a
             // failure to write today's session is about the card, and an error

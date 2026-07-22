@@ -1,10 +1,9 @@
 import SwiftUI
 
-/// The app's destinations. Four tabs and nothing else — anything that isn't one
+/// The app's destinations. Three tabs and nothing else — anything that isn't one
 /// of these is a sheet or the live session.
 enum Page: String, CaseIterable, Identifiable {
     case home
-    case coach
     case history
     case profile
 
@@ -19,7 +18,6 @@ enum Page: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .home: "Home"
-        case .coach: "Coach"
         case .history: "History"
         case .profile: "Profile"
         case .create: "New session"
@@ -34,14 +32,13 @@ enum Page: String, CaseIterable, Identifiable {
     var showsLargeTitle: Bool {
         switch self {
         case .home, .profile, .create: false
-        case .coach, .history: true
+        case .history: true
         }
     }
 
     var icon: String {
         switch self {
         case .home: "house.fill"
-        case .coach: "figure.boxing"
         case .history: "clock.arrow.circlepath"
         case .profile: "person.crop.circle.fill"
         case .create: "plus"

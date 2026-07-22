@@ -23,6 +23,12 @@ struct SettingsView: View {
     @AppStorage(SessionEngine.coachingKey) private var speaksCoaching: Bool = true
     @AppStorage(SettingsView.voiceNameKey) private var cornermanVoiceName: String = ""
 
+    /// The one thing the generator can't learn by watching you train. Moved
+    /// here when the Coach tab was removed — it's a single choice that shapes
+    /// every written session, and losing the only control for it would have
+    /// quietly pinned everyone to "beginner" forever.
+    @AppStorage(TrainingProfile.levelKey) private var level: String = TrainingProfile.Level.beginner.rawValue
+
     var body: some View {
         List {
             Section {
@@ -47,6 +53,17 @@ struct SettingsView: View {
                         // control whose "on" state is the good one.
                         .tint(.green)
                 }
+            }
+            .listRowBackground(Theme.Palette.surface)
+
+            Section {
+                Picker("Experience", selection: $level) {
+                    ForEach(TrainingProfile.Level.allCases, id: \.rawValue) { level in
+                        Text(level.rawValue.capitalized).tag(level.rawValue)
+                    }
+                }
+            } footer: {
+                Text("How hard the cornerman writes your sessions.")
             }
             .listRowBackground(Theme.Palette.surface)
 
