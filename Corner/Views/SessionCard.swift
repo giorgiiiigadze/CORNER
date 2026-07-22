@@ -211,16 +211,12 @@ struct SessionAccessory: View {
                 HStack {
                     artwork
 
-                    VStack(alignment: .leading) {
-                        Text(hasStarted ? "Session unfinished" : "Ready to start")
-                            .font(.headline)
-                            .lineLimit(1)
-
-                        Text(tally)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
+                    // One line now. The round count moved out — the bar says
+                    // what the session is, and the count is a detail for the
+                    // History card, not for a glance from another tab.
+                    Text(hasStarted ? "Session unfinished" : "Ready to start")
+                        .font(.headline)
+                        .lineLimit(1)
 
                     Spacer(minLength: 0)
                 }
@@ -259,12 +255,6 @@ struct SessionAccessory: View {
                     .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(.white)
             }
-    }
-
-    private var tally: String {
-        hasStarted
-            ? "\(session.done) of \(session.total) rounds"
-            : (session.total == 1 ? "1 round" : "\(session.total) rounds")
     }
 }
 
