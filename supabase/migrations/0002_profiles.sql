@@ -78,6 +78,13 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
 
+-- The function is only ever meant to fire from the trigger above, and a trigger
+-- runs as its definer no matter who holds EXECUTE — so revoking the default
+-- grant costs the trigger nothing and takes the function off the public
+-- `/rest/v1/rpc/handle_new_user` surface, where a `security definer` function
+-- has no business being callable. (Supabase's own linter flags it otherwise.)
+revoke execute on function public.handle_new_user() from public, anon, authenticated;
+
 -- Keeps `updated_at` honest without the client having to remember.
 create function public.touch_updated_at()
 returns trigger

@@ -43,21 +43,35 @@ struct ProfilePage: View {
 
     private var identity: some View {
         VStack(spacing: 12) {
-            Circle()
-                .fill(Theme.Palette.accentLight)
-                .frame(width: 96, height: 96)
-                .overlay {
-                    Image(systemName: "figure.boxing")
-                        .font(.system(size: 46, weight: .bold))
-                        .foregroundStyle(.white)
-                }
+            // Yours, not the app's. This was a red disc with a boxing glove on
+            // it — the same image for every account on earth, which is a logo
+            // in the place a profile picture goes.
+            //
+            // Seeded on the user id so the colour survives changing your
+            // address, and so two people on one phone don't get the same disc.
+            InitialsAvatar(
+                name: auth.displayName,
+                email: auth.email,
+                seed: auth.userID ?? auth.email ?? ""
+            )
 
-            // The address until there's a name to show. `display_name` is in the
-            // profiles table waiting for it, and this is the line it lands on.
-            Text(auth.email ?? "Signed in")
+            // The name when the profile has one, the address until then. Both
+            // are the same line rather than a name *above* an address: one of
+            // the two is always missing, and a layout that reserves space for
+            // both is a gap on most accounts.
+            Text(auth.displayName ?? auth.email ?? "Signed in")
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(.primary)
                 .lineLimit(1)
+
+            // The address moves down here once a name has taken the line above
+            // it, so nothing that was on screen disappears when a name arrives.
+            if auth.displayName != nil, let email = auth.email {
+                Text(email)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
 
             if let since = stats.lastTrained {
                 Text("Last trained \(since.formatted(.relative(presentation: .named)))")
