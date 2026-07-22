@@ -197,49 +197,54 @@ struct SessionAccessory: View {
     private var hasStarted: Bool { session.done > 0 }
 
     var body: some View {
-        Button(action: onResume) {
-            HStack(spacing: 12) {
-                // The album-art slot, the way Apple Music keeps a rounded square
-                // on the left whether or not there's artwork. A placeholder for
-                // now — a session has no image yet — but it anchors the bar and
-                // gives the label something to sit against rather than floating
-                // at the glass's edge.
-                artwork
+        // No hand-set padding, no pixel font sizes, no fixed play frame. The
+        // accessory insets its own content and the type is semantic, so the
+        // system places all of this on its own metrics the way it does Apple
+        // Music's — the bar decides the margins and the sizes, not us.
+        //
+        // Two controls, not one wrapping button: the row is the main tap (the
+        // whole label opens the session, as tapping Now Playing opens the
+        // player), and the play is its own button beside it. That split is the
+        // native shape — a labelled control with a trailing action.
+        HStack {
+            Button(action: onResume) {
+                HStack {
+                    artwork
 
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(hasStarted ? "Session unfinished" : "Ready to start")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
+                    VStack(alignment: .leading) {
+                        Text(hasStarted ? "Session unfinished" : "Ready to start")
+                            .font(.headline)
+                            .lineLimit(1)
 
-                    Text(tally)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                        Text(tally)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+
+                    Spacer(minLength: 0)
                 }
-
-                Spacer(minLength: 8)
-
-                // Play, not a chevron: this bar starts a workout, and the
-                // triangle is what "start" looks like everywhere the phone plays
-                // something. White, not the accent — on the neutral glass it's a
-                // control, and white is what a control reads as; the red would
-                // pull the eye to it as if it were a warning.
-                Image(systemName: "play.fill")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(.primary)
-                    .frame(width: 30)
+                .contentShape(.rect)
             }
-            .padding(.horizontal, 12)
-            .frame(maxWidth: .infinity)
-            .contentShape(.rect)
+            .buttonStyle(.plain)
+            .accessibilityLabel(
+                hasStarted
+                    ? "Session unfinished, \(session.done) of \(session.total) rounds. Resume."
+                    : "Session ready to start, \(session.total) rounds. Start."
+            )
+
+            Button(action: onResume) {
+                Image(systemName: "play.fill")
+                    .font(.title3)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.primary)
+            .accessibilityLabel("Start")
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(
-            hasStarted
-                ? "Session unfinished, \(session.done) of \(session.total) rounds. Resume."
-                : "Session ready to start, \(session.total) rounds. Start."
-        )
+        // Breathing room off the accessory's edges. The system inset alone left
+        // the art and the play sitting hard against the glass; this is the gap
+        // Apple Music keeps between its content and the pill.
+        .padding(.horizontal, 16)
     }
 
     /// The leading square. A filled rounded box with the brand mark in it,
