@@ -82,21 +82,25 @@ struct InitialsAvatar: View {
         Self.palette[Self.index(for: seed, count: Self.palette.count)]
     }
 
-    /// Eight discs, and deliberately no red or green.
+    /// Ten discs, the supplied set.
     ///
-    /// Those two are spoken for: red is the app's accent and green means a
-    /// session is running. An avatar that happened to be red would be the only
-    /// red on Profile that doesn't mean "act on this", and the whole reason the
-    /// accent works is that it appears rarely.
+    /// This includes a red (#E74C3C) and two greens (#27AE60, #2ECC71), which
+    /// the earlier palette deliberately avoided — red is the app's accent and
+    /// green means a session is running. They're a different enough shade here
+    /// (a flat orange-red, a Nephritis green) not to read as those signals on a
+    /// small disc, but it's the reason the count is 10 and not the eight this
+    /// started with: the constraint was dropped on purpose, not by oversight.
     private static let palette: [Color] = [
-        Color(red: 0.35, green: 0.34, blue: 0.84),  // indigo
-        Color(red: 0.58, green: 0.31, blue: 0.85),  // violet
-        Color(red: 0.85, green: 0.28, blue: 0.58),  // magenta
-        Color(red: 0.93, green: 0.49, blue: 0.19),  // orange
-        Color(red: 0.16, green: 0.58, blue: 0.78),  // steel blue
-        Color(red: 0.11, green: 0.60, blue: 0.60),  // teal
-        Color(red: 0.47, green: 0.40, blue: 0.31),  // clay
-        Color(red: 0.30, green: 0.44, blue: 0.72),  // slate
+        Color(red: 0.906, green: 0.298, blue: 0.235),  // #E74C3C red
+        Color(red: 0.902, green: 0.494, blue: 0.133),  // #E67E22 orange
+        Color(red: 0.153, green: 0.682, blue: 0.376),  // #27AE60 green
+        Color(red: 0.180, green: 0.800, blue: 0.443),  // #2ECC71 emerald
+        Color(red: 0.102, green: 0.737, blue: 0.612),  // #1ABC9C teal
+        Color(red: 0.161, green: 0.502, blue: 0.725),  // #2980B9 blue
+        Color(red: 0.557, green: 0.267, blue: 0.678),  // #8E44AD purple
+        Color(red: 0.847, green: 0.106, blue: 0.376),  // #D81B60 pink
+        Color(red: 0.000, green: 0.592, blue: 0.655),  // #0097A7 cyan
+        Color(red: 1.000, green: 0.341, blue: 0.133),  // #FF5722 deep orange
     ]
 
     /// A stable index for a string.
