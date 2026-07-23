@@ -237,7 +237,7 @@ struct ContentView: View {
                 // full-screen sheet for four elements reads as a step in a flow
                 // that has more steps coming.
                 .presentationDetents([.height(520)])
-                .presentationDragIndicator(.visible)
+                .presentationDragIndicator(.hidden)
         }
         .sheet(isPresented: $showingSetup) {
             SessionSetupSheet(request: $request) {

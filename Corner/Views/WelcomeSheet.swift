@@ -31,7 +31,7 @@ struct WelcomeSheet: View {
                 .multilineTextAlignment(.center)
                 .padding(.top, 26)
 
-            Text("Prop the phone up and leave it there. Every round is called out loud — what it's for, and the one thing to hold onto.")
+            Text("Prop the phone up and leave it there. Every round is called out loud: what it's for, and the one thing to hold onto.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -61,10 +61,10 @@ struct WelcomeSheet: View {
         .padding(.top, 32)
         .padding(.bottom, 20)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        // Grey rather than the app's black. A sheet that's the same colour as
-        // the screen behind it doesn't read as a sheet — it reads as the screen
-        // having changed.
-        .background(Theme.Palette.surface)
+        // #1F1F1F, a hair above the app's black. A sheet the same colour as the
+        // screen behind it doesn't read as a sheet, it reads as the screen
+        // having changed; this lifts just enough to sit on top.
+        .background(Color(red: 0.122, green: 0.122, blue: 0.122))
     }
 
     /// Placeholder for the artwork.
@@ -100,7 +100,7 @@ struct WelcomeSheet: View {
                 .font(.caption)
                 .foregroundStyle(Theme.Live.work)
 
-            Text("Already on — turn it off in Settings")
+            Text("Already on. Turn it off in Settings.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

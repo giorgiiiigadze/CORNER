@@ -145,7 +145,7 @@ struct VoicePicker: View {
             Section {
                 cornermanVoices
             } footer: {
-                Text("Tap to hear it. The voice is the app — pick one you'd take instructions from.")
+                Text("Tap to hear it. The voice is the app, so pick one you'd take instructions from.")
             }
             .listRowBackground(Theme.Palette.surface)
         }
