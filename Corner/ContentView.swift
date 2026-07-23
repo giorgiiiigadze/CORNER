@@ -233,10 +233,9 @@ struct ContentView: View {
                 hasSeenWelcome = true
                 showingWelcome = false
             }
-                // Fitted rather than full height: it's four elements, and a
-                // full-screen sheet for four elements reads as a step in a flow
-                // that has more steps coming.
-                .presentationDetents([.height(520)])
+                // Full height — the Apple onboarding shape, a mockup up top and
+                // a single button pinned to the bottom.
+                .presentationDetents([.large])
                 .presentationDragIndicator(.hidden)
         }
         .sheet(isPresented: $showingSetup) {
