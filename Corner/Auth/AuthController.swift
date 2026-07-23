@@ -46,6 +46,18 @@ final class AuthController {
     /// doesn't answer — costs a log line and nothing else.
     private(set) var displayName: String?
 
+    /// The rest of the profile the "Manage Profile" screen edits. Same nil-means-
+    /// unset contract as `displayName`: a blank field is stored and read back as
+    /// nil, so the screen has one empty state to show a prompt for, not two.
+    ///
+    /// Height and weight are the SI units the column holds — centimetres and
+    /// kilograms — and are converted to the reader's locale only at the point
+    /// they're shown. `birthdate` is a plain calendar day.
+    private(set) var bio: String?
+    private(set) var heightCm: Double?
+    private(set) var weightKg: Double?
+    private(set) var birthdate: Date?
+
     /// The Supabase user id. What every stored session is keyed to, so a second
     /// person signing in on this phone sees their own history rather than the
     /// last person's.
@@ -232,9 +244,14 @@ final class AuthController {
         email = nil
         userID = nil
         // Cleared with the rest of the identity. Left behind, the next person to
-        // sign in on this phone would be greeted by the last one's name until
-        // their own profile came back.
+        // sign in on this phone would be greeted by the last one's name — and,
+        // now, the last one's height and weight — until their own profile came
+        // back.
         displayName = nil
+        bio = nil
+        heightCm = nil
+        weightKg = nil
+        birthdate = nil
         state = .signedOut
     }
 
@@ -357,7 +374,7 @@ final class AuthController {
         // never assembles a result set we'd only throw away.
         components?.queryItems = [
             URLQueryItem(name: "id", value: "eq.\(userID)"),
-            URLQueryItem(name: "select", value: "display_name"),
+            URLQueryItem(name: "select", value: "display_name,bio,height_cm,weight_kg,birthdate"),
         ]
 
         guard let url = components?.url else { return }
@@ -369,7 +386,16 @@ final class AuthController {
         // unwrapping a single-element list on every read.
         request.setValue("application/vnd.pgrst.object+json", forHTTPHeaderField: "accept")
 
-        struct Profile: Decodable { let display_name: String? }
+        // `birthdate` decodes as the "YYYY-MM-DD" string PostgREST sends for a
+        // `date`; parsing it here rather than fighting a JSONDecoder date
+        // strategy keeps the column honestly time-of-day-free.
+        struct Profile: Decodable {
+            let display_name: String?
+            let bio: String?
+            let height_cm: Double?
+            let weight_kg: Double?
+            let birthdate: String?
+        }
 
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
@@ -384,15 +410,105 @@ final class AuthController {
             }
 
             let profile = try JSONDecoder().decode(Profile.self, from: data)
-            let trimmed = profile.display_name?.trimmingCharacters(in: .whitespacesAndNewlines)
             // Empty is nil. A name someone cleared to blank is a name they
             // haven't set, and the column being nullable is the whole reason
             // `0002` distinguishes those — don't reintroduce "" downstream.
-            displayName = (trimmed?.isEmpty ?? true) ? nil : trimmed
+            displayName = Self.cleaned(profile.display_name)
+            bio = Self.cleaned(profile.bio)
+            heightCm = profile.height_cm
+            weightKg = profile.weight_kg
+            birthdate = profile.birthdate.flatMap(Self.dateFormatter.date(from:))
         } catch {
             log.info("Profile fetch failed: \(error.localizedDescription, privacy: .public)")
         }
     }
+
+    /// Writes the edited profile back and updates the in-memory copy on success.
+    ///
+    /// Unlike `loadProfile`, this one reports failure: the "Manage Profile"
+    /// screen is a place the fighter is deliberately changing something, and a
+    /// save that silently didn't happen is the kind of thing they find out about
+    /// on a new phone. Each argument is `nil` to leave that column untouched, so
+    /// the screen can save one field at a time without clobbering the others.
+    ///
+    /// A blank string means "clear it": callers pass `""` to null a column and
+    /// omit the argument (`nil`) to leave it alone. That two-way distinction is
+    /// why the parameters are `String??` rather than `String?`.
+    func updateProfile(
+        displayName newName: String?? = nil,
+        bio newBio: String?? = nil,
+        heightCm newHeight: Double?? = nil,
+        weightKg newWeight: Double?? = nil,
+        birthdate newBirthdate: Date?? = nil
+    ) async -> Bool {
+        guard let userID, let token = await token() else { return false }
+
+        var body: [String: Any?] = [:]
+        if let newName { body["display_name"] = Self.nullIfEmpty(newName) }
+        if let newBio { body["bio"] = Self.nullIfEmpty(newBio) }
+        if let newHeight { body["height_cm"] = newHeight }
+        if let newWeight { body["weight_kg"] = newWeight }
+        if let newBirthdate { body["birthdate"] = newBirthdate.map(Self.dateFormatter.string(from:)) }
+        guard !body.isEmpty else { return true }
+
+        var components = URLComponents(
+            url: Supabase.url.appending(path: "rest/v1/profiles"),
+            resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = [URLQueryItem(name: "id", value: "eq.\(userID)")]
+        guard let url = components?.url else { return false }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "PATCH"
+        request.setValue(Supabase.publishableKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "authorization")
+        request.setValue("application/json", forHTTPHeaderField: "content-type")
+        // Nothing to decode on the way back — the screen already holds the new
+        // values — so ask PostgREST not to send the row.
+        request.setValue("return=minimal", forHTTPHeaderField: "prefer")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body.mapValues { $0 ?? NSNull() })
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+            guard (200..<300).contains(status) else {
+                log.error("Profile update failed (\(status)): \(String(data: data.prefix(300), encoding: .utf8) ?? "", privacy: .public)")
+                return false
+            }
+        } catch {
+            log.info("Profile update failed: \(error.localizedDescription, privacy: .public)")
+            return false
+        }
+
+        // Mirror the write locally so the screens that read these reflect it
+        // without a re-fetch. Same clean-to-nil rule as the read path.
+        if let newName { displayName = Self.cleaned(newName) }
+        if let newBio { bio = Self.cleaned(newBio) }
+        if let newHeight { heightCm = newHeight }
+        if let newWeight { weightKg = newWeight }
+        if let newBirthdate { birthdate = newBirthdate }
+        return true
+    }
+
+    /// Trims, then treats blank as absent — the one rule both read and write use
+    /// so "" never leaks past this class as a value distinct from nil.
+    private static func cleaned(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (trimmed?.isEmpty ?? true) ? nil : trimmed
+    }
+
+    private static func nullIfEmpty(_ value: String?) -> String? { cleaned(value) }
+
+    /// Calendar-day formatting for `birthdate`, fixed to a stable locale and UTC
+    /// so the string that goes to Postgres is the same day it came back as,
+    /// regardless of where the phone is.
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
 
     /// Supabase's own wording where it has any, because it's better than
     /// anything generic: "Invalid login credentials" and "User already

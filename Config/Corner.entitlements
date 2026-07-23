@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- HealthKit. The capability that lets the app talk to Apple Health at all;
+	     without it the store's authorization request throws rather than
+	     prompting. The Info.plist usage strings say why we're asking - this
+	     grants the right to ask. -->
+	<key>com.apple.developer.healthkit</key>
+	<true/>
+</dict>
+</plist>

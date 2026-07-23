@@ -23,5 +23,19 @@
 	     and the timer exists only inside the app. -->
 	<key>NSSupportsLiveActivities</key>
 	<true/>
+	<!-- Apple Health. These live in the base plist rather than as
+	     INFOPLIST_KEY_* build settings because the HealthKit usage keys aren't
+	     on Xcode's whitelist of known keys - an arbitrary one is silently
+	     dropped (the same reason the comment at the top of this file gives).
+
+	     Read is what the profile screen uses: it pulls height, weight and date
+	     of birth so the fighter doesn't retype what Health already knows.
+	     Write is here for the near future - copying a finished session back to
+	     Health as a workout - so turning it on is a code change, not another
+	     round through the permission-string plumbing. -->
+	<key>NSHealthShareUsageDescription</key>
+	<string>So it can fill in your height, weight and date of birth from Apple Health instead of asking you to type them.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>So your finished sessions and any measurements you enter can be saved to Apple Health.</string>
 </dict>
 </plist>

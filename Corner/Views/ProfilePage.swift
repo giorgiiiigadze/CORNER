@@ -28,6 +28,7 @@ struct ProfilePage: View {
             VStack(spacing: 28) {
                 identity
                 totals
+                if hasBodyStats { bodyStats }
                 backup
             }
             .padding(.horizontal, 16)
@@ -110,6 +111,39 @@ struct ProfilePage: View {
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
         }
+    }
+
+    // MARK: - Body stats
+
+    /// Weight, height and age, shown only once there's at least one of them —
+    /// filled from Apple Health or typed in Manage Profile. An empty row here
+    /// would be a prompt on a page that's meant to be a record, so it stays gone
+    /// until there's something to record.
+    private var hasBodyStats: Bool {
+        auth.weightKg != nil || auth.heightCm != nil || auth.birthdate != nil
+    }
+
+    private var bodyStats: some View {
+        HStack(spacing: 34) {
+            if let weight = ManageProfileView.weightText(auth.weightKg) {
+                total(weight, "Weight")
+            }
+            if let height = ManageProfileView.heightText(auth.heightCm) {
+                total(height, "Height")
+            }
+            if let age = ageText {
+                total(age, "Age")
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    /// Age in whole years from the birthdate, which is what a profile shows —
+    /// the date itself is an edit-screen detail, not a headline number.
+    private var ageText: String? {
+        guard let birthdate = auth.birthdate else { return nil }
+        let years = Calendar.current.dateComponents([.year], from: birthdate, to: .now).year
+        return years.map(String.init)
     }
 
     // MARK: - Backup

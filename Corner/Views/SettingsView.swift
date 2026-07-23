@@ -31,6 +31,21 @@ struct SettingsView: View {
 
     var body: some View {
         List {
+            // The person, at the top. Everything below is about the app; this one
+            // row is about who's using it, which is why it leads and sits on its
+            // own rather than mixed in with the voice and coaching toggles.
+            Section {
+                NavigationLink {
+                    ManageProfileView()
+                } label: {
+                    SettingRow(
+                        title: "Manage Profile",
+                        description: "Your name, bio, and body stats."
+                    )
+                }
+            }
+            .listRowBackground(Theme.Palette.surface)
+
             Section {
                 SettingRow(
                     title: "Talk me through it",
