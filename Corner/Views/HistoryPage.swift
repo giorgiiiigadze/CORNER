@@ -13,30 +13,15 @@ struct HistoryPage: View {
     let history: [TrainingRecord]
     let onDelete: (IndexSet) -> Void
 
-    /// Today's session if it was left partway through, and the way back into it.
-    ///
-    /// Here as well as on Home because this is the tab you open to ask "what
-    /// have I been doing" — and a session you walked away from an hour ago is
-    /// the truest answer to that, while being the one thing on the page you can
-    /// still change. It was only ever on Home, which meant the screen devoted to
-    /// your sessions was the one screen that didn't mention the live one.
-    var unfinished: UnfinishedSession?
-    var onResume: () -> Void = {}
-
     var body: some View {
-        if history.isEmpty && unfinished == nil {
+        if history.isEmpty {
             empty
         } else {
             List {
-                if let unfinished {
-                    Section {
-                        ResumeCard(session: unfinished, onResume: onResume)
-                            .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
-                            .listRowBackground(Color.clear)
-                            .listRowSeparator(.hidden)
-                    }
-                    .listSectionMargins(.horizontal, 16)
-                }
+                // The resume card used to lead this page. It's gone: History is a
+                // record of what's finished, and the live session already has two
+                // homes — the card on Home and the tab-bar accessory, which is
+                // reachable from every tab including this one.
 
                 // The same card Home draws, not a two-line row that happens to
                 // name the same session. This page used to be a table — title

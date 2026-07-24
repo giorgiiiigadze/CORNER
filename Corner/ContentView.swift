@@ -121,14 +121,7 @@ struct ContentView: View {
             }
             Tab(Page.history.title, systemImage: Page.history.icon, value: .history) {
                 destination(.history) {
-                    HistoryPage(
-                        history: history,
-                        onDelete: delete,
-                        unfinished: unfinishedToday.map {
-                            .init(title: $0.plan.focus, done: $0.done, total: $0.plan.roundCount)
-                        },
-                        onResume: resumeToday
-                    )
+                    HistoryPage(history: history, onDelete: delete)
                 }
             }
             // The profile tab wears the user's own mark, the way X puts your

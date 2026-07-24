@@ -40,13 +40,47 @@ struct SessionCard: View {
         case relativeDay
     }
 
+    /// Whether every round that was planned actually got worked.
+    ///
+    /// Both halves are needed. `endedEarly` catches walking out; the round count
+    /// catches the quieter version, where the session was let run but rounds were
+    /// skipped past — and a card that went green for that would be calling a
+    /// session complete that wasn't.
+    private var isComplete: Bool {
+        !record.endedEarly
+            && record.roundsPlanned > 0
+            && record.roundsCompleted >= record.roundsPlanned
+    }
+
+    /// Green for a session finished in full, red for anything less.
+    ///
+    /// The card's whole surface carries it, so a scroll through History reads as
+    /// a record of what actually got done before a single word is read.
+    private var tint: Color {
+        isComplete ? .green : Theme.Palette.accent
+    }
+
+    /// Green needs more of itself than red does to reach the same brightness —
+    /// the system green is darker to begin with, so at a shared opacity the
+    /// finished cards came out muddier than the unfinished ones they're meant to
+    /// look better than.
+    private var fillOpacity: Double { isComplete ? 0.22 : 0.18 }
+    private var tileOpacity: Double { isComplete ? 0.28 : 0.24 }
+
+    /// The Fitness Workout card, in Corner's colours.
+    ///
+    /// The shape is borrowed on purpose: a big glyph in the corner, the name of
+    /// the thing in type you can read across a room, and the facts underneath as
+    /// a row of equal tiles. What's left out is the play button — Fitness's cards
+    /// launch a workout, and these are a record of one that already happened.
+    /// Adding an action that looked like "start" to a card about the past would
+    /// be the one part of that design that doesn't survive the translation.
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(record.title)
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top) {
+                Image(systemName: "figure.boxing")
+                    .font(.system(size: 34, weight: .semibold))
+                    .foregroundStyle(tint)
 
                 Spacer(minLength: 8)
 
@@ -56,33 +90,55 @@ struct SessionCard: View {
                     .lineLimit(1)
             }
 
+            // The name is the headline now, where rounds used to be. That's the
+            // Fitness construction — "Outdoor Walk" over its numbers — and it
+            // reads better in a long list, where every card otherwise opened with
+            // the same word.
+            Text(record.title)
+                .font(.system(size: 25, weight: .bold))
+                .foregroundStyle(.white)
+                .lineLimit(2)
+                .minimumScaleFactor(0.8)
+
+            // Equal tiles across the width, the way the reference lays out its
+            // three controls. Rounds always; the rest only when there's something
+            // to say.
             HStack(spacing: 8) {
-                Image(systemName: "figure.boxing")
-                    .font(.system(size: 19, weight: .semibold))
-                    .foregroundStyle(Theme.Palette.accentLight)
+                statTile("figure.boxing", record.roundsCompleted == 1 ? "1 round" : "\(record.roundsCompleted) rounds")
 
-                Text(record.roundsCompleted == 1 ? "1 round" : "\(record.roundsCompleted) rounds")
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(.primary)
-            }
-
-            HStack(spacing: 14) {
                 if let seconds = record.sessionSeconds, seconds >= 60 {
-                    CardDetail(symbol: "clock", text: "\(seconds / 60) min")
+                    statTile("clock", "\(seconds / 60) min")
                 }
 
                 // Only when it's true. "Finished" on every other card is noise
                 // that makes the one card carrying news harder to spot.
                 if record.endedEarly {
-                    CardDetail(symbol: "flag.slash", text: "ended early")
-                }
-
-                if let focus = record.focuses.first {
-                    CardDetail(symbol: "target", text: focus)
+                    statTile("flag.slash", "Ended early")
+                } else if let focus = record.focuses.first {
+                    statTile("target", focus)
                 }
             }
         }
-        .sessionCard()
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(tint.opacity(fillOpacity), in: .rect(cornerRadius: 26))
+    }
+
+    /// One fact, in a tile that shares the row equally with its siblings.
+    private func statTile(_ symbol: String, _ text: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: symbol)
+                .font(.caption.weight(.semibold))
+            Text(text)
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+        .foregroundStyle(.white)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 11)
+        .padding(.horizontal, 10)
+        .background(tint.opacity(tileOpacity), in: .rect(cornerRadius: 14))
     }
 
     @ViewBuilder
