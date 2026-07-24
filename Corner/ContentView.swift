@@ -124,6 +124,14 @@ struct ContentView: View {
                     HistoryPage(history: history, onDelete: delete)
                 }
             }
+            // Between the record and the person, which is where it belongs:
+            // History is what you did, Coach is what you've told the app about
+            // you, Profile is who you are. The standing instructions had no
+            // screen at all before this — they were read into every prompt and
+            // written nowhere.
+            Tab(Page.coach.title, systemImage: Page.coach.icon, value: .coach) {
+                destination(.coach) { CoachPage() }
+            }
             // The profile tab wears the user's own mark, the way X puts your
             // avatar in the tab bar rather than a generic silhouette. It's the
             // initials disc — there's no uploaded photo in the app yet — and it
@@ -183,6 +191,18 @@ struct ContentView: View {
             },
             onResume: resumeToday
         )
+        // A tick under the thumb on every change of tab. The system bar doesn't
+        // give one on its own, and this is the one control in the app you use
+        // without looking at it.
+        //
+        // `.selection` rather than the week strip's impact: that's a tap on a
+        // target, this is a move between fixed positions, which is exactly the
+        // difference the two feedbacks are for.
+        //
+        // On the value, not on the bar, so a page moved to in code feels the
+        // same as one tapped — the profile button in Home's toolbar sets `page`
+        // directly, and arriving at Profile should feel the same either way.
+        .sensoryFeedback(.selection, trigger: page)
         // The bar stays put. It used to shrink to the selected tab on scroll —
         // the Apple Music gesture — which reads as the other tabs vanishing on a
         // bar this narrow, and buys back a strip of list nobody asked for.
@@ -456,10 +476,10 @@ struct ContentView: View {
     ///
     /// Not inset with the rest of the screen: it scrolls, and a scrolling row
     /// that stops short of the edge reads as clipped rather than as continuing.
-    /// The negative inset undoes the margin the section would otherwise apply.
+    /// The width comes from the section it sits in, which drops its horizontal
+    /// margins for this row rather than having the strip cancel them by hand.
     private var masthead: some View {
         WeekStrip(progress: dayProgress, selection: $selectedDay)
-            .padding(.horizontal, -16)
             .padding(.bottom, 10)
     }
 
@@ -481,7 +501,7 @@ struct ContentView: View {
             Text("CORNER")
                 // Bebas is condensed and already all caps, so it carries a
                 // larger size in the same width the system face needed at 24.
-                .font(Theme.Fonts.wordmark(36))
+                .font(Theme.Fonts.wordmark(44))
                 .kerning(1)
                 .foregroundStyle(.primary)
                 // The bar hands a toolbar item a width and expects it to fit.
@@ -489,6 +509,11 @@ struct ContentView: View {
                 // taking the room it needs.
                 .lineLimit(1)
                 .fixedSize()
+                // The height the type asks for, claimed explicitly. A bar item
+                // is scaled down to the bar's own height otherwise, which is
+                // why raising the point size on its own changed nothing: the
+                // wordmark came back the same size it went in.
+                .frame(height: 44, alignment: .leading)
                 .accessibilityAddTraits(.isHeader)
         }
         // Off the glass. iOS 26 gives every bar item the shared Liquid Glass
@@ -524,7 +549,11 @@ struct ContentView: View {
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
             }
-            .listSectionMargins(.horizontal, 16)
+            // Edge to edge. The strip is a scroller, so the space its days need
+            // to breathe belongs inside it (see `contentMargins` in WeekStrip),
+            // not around the container: a margin out here would stop the row
+            // short of the bezel and make it read as clipped.
+            .listSectionMargins(.horizontal, 0)
 
             // The open session used to sit here, above the dashboard. It moved
             // to the tab bar accessory — see `tabViewBottomAccessory` above —

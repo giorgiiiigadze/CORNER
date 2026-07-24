@@ -1,10 +1,11 @@
 import SwiftUI
 
-/// The app's destinations. Three tabs and nothing else — anything that isn't one
+/// The app's destinations. Four tabs and nothing else — anything that isn't one
 /// of these is a sheet or the live session.
 enum Page: String, CaseIterable, Identifiable {
     case home
     case history
+    case coach
     case profile
 
     /// Not a page. It's the trailing button beside the tab bar — selecting it
@@ -21,6 +22,10 @@ enum Page: String, CaseIterable, Identifiable {
         // the large title is where iOS puts a wordmark.
         case .home: "CORNER"
         case .history: "History"
+        // What the coach knows, not what it says. The page is a list of
+        // standing instructions, and "Coach" is the shortest name for the thing
+        // they're instructions to.
+        case .coach: "Coach"
         case .profile: "Profile"
         case .create: "New session"
         }
@@ -36,7 +41,7 @@ enum Page: String, CaseIterable, Identifiable {
     var showsLargeTitle: Bool {
         switch self {
         case .home, .profile, .create: false
-        case .history: true
+        case .history, .coach: true
         }
     }
 
@@ -44,6 +49,7 @@ enum Page: String, CaseIterable, Identifiable {
         switch self {
         case .home: "house.fill"
         case .history: "clock.arrow.circlepath"
+        case .coach: "text.bubble.fill"
         case .profile: "person.crop.circle.fill"
         case .create: "plus"
         }

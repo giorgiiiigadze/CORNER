@@ -37,9 +37,11 @@ struct WeekStrip: View {
     /// to be one width everywhere instead of a fraction of a screen that only
     /// happens to fit the current week.
     ///
-    /// Widened with the day circles: at 46 a 42pt circle left 2pt a side, and the
-    /// highlight behind it had nothing to sit in.
-    private static let slot: CGFloat = 56
+    /// Sized to the circle it holds, plus the room the highlight needs behind
+    /// it. The row was a header pretending to be the screen at 56 wide and 42
+    /// across the circle: it's a calendar you glance at on the way past, not the
+    /// thing you came to read.
+    private static let slot: CGFloat = 46
 
     private let calendar = Calendar.current
 
@@ -64,17 +66,34 @@ struct WeekStrip: View {
                             .font(.caption2.weight(.medium))
                             .foregroundStyle(isToday(day) || isSelected(day) ? .primary : .secondary)
 
-                        Text(day, format: .dateTime.day())
-                            .font(.subheadline.weight(isToday(day) ? .bold : .regular))
-                            .foregroundStyle(number(for: day))
-                            .frame(width: 42, height: 42)
-                            .background { ring(for: day) }
+                        // A finished day stops showing its date. The number is
+                        // there to tell one circle from another while the week
+                        // is still being worked; once a day is done the only
+                        // fact worth reading off it is that it's done, and the
+                        // filled disc says that from further away than an arc
+                        // around a numeral does.
+                        Group {
+                            if isCompleted(day) {
+                                Image(systemName: "checkmark")
+                                    .font(.caption.weight(.bold))
+                                    // Against the lime, not the page. The disc
+                                    // is the brightest thing in the row and ink
+                                    // is the only mark that holds up on it.
+                                    .foregroundStyle(Color.black)
+                            } else {
+                                Text(day, format: .dateTime.day())
+                                    .font(.footnote.weight(isToday(day) ? .bold : .regular))
+                                    .foregroundStyle(number(for: day))
+                            }
+                        }
+                        .frame(width: 34, height: 34)
+                        .background { ring(for: day) }
                     }
                     // The padding is on every cell, not just today's — it's what
                     // reserves the room the highlight sits in. Applied only to
                     // the current day, the row would shift sideways each time
                     // the date rolled over.
-                    .padding(.vertical, 11)
+                    .padding(.vertical, 9)
                     .padding(.horizontal, 4)
                     .frame(width: Self.slot)
                     .background {
@@ -86,7 +105,7 @@ struct WeekStrip: View {
                         // the numbers it's a control for. The ring inside still
                         // tells today apart from any other selected day.
                         if isSelected(day) || isToday(day) {
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
                                 .fill(Color(.secondarySystemGroupedBackground))
                         }
                     }
@@ -125,7 +144,21 @@ struct WeekStrip: View {
     /// the session button, which inverts what the header is for.
     @ViewBuilder
     private func ring(for day: Date) -> some View {
-        if let fraction = fraction(for: day) {
+        // The one exception to "outline in every state": a day finished in full
+        // is a solid disc. A ring closed all the way round reads as a circle
+        // that happens to be lime, and it's the same shape as a day left at
+        // nine tenths — the difference between "nearly" and "done" was a gap of
+        // two degrees. Filled, it's a different object.
+        if isCompleted(day) {
+            // Inset inside the slot the other days fill to their edges. A solid
+            // disc carries further than a stroke of the same diameter, so drawn
+            // to the same circle it sat a size larger than everything beside
+            // it. The checkmark keeps its own size — this is the disc shrinking
+            // to the weight of the row, not the mark getting quieter.
+            Circle()
+                .fill(Theme.Palette.accentLight)
+                .padding(3)
+        } else if let fraction = fraction(for: day) {
             ZStack {
                 // The unfilled remainder stays visible behind the arc. Without
                 // it a half-finished session reads as a broken circle rather
@@ -195,6 +228,12 @@ struct WeekStrip: View {
         fraction(for: day) != nil
     }
 
+    /// Every round that was planned, worked. Distinct from trained: a day with
+    /// half a session on it is one of those and not the other.
+    private func isCompleted(_ day: Date) -> Bool {
+        (fraction(for: day) ?? 0) >= 1
+    }
+
     /// Nil on a day you didn't train, which is what separates "no ring" from a
     /// ring that happens to be empty.
     private func fraction(for day: Date) -> Double? {
@@ -211,7 +250,7 @@ struct WeekStrip: View {
     /// shouldn't flatten the two.
     private var completedThisWeek: Int {
         guard let week = calendar.dateInterval(of: .weekOfYear, for: .now) else { return 0 }
-        return days.filter { week.contains($0) && (fraction(for: $0) ?? 0) >= 1 }.count
+        return days.filter { week.contains($0) && isCompleted($0) }.count
     }
 
     /// Full-strength on a day that means something, dimmed on the days either
