@@ -17,7 +17,7 @@ struct UnfinishedSession: Equatable {
 
 /// One session that happened.
 ///
-/// Lives here rather than inside `RecentSessions` because it is now on two
+/// Lives here rather than inside a list view because it is now on two
 /// screens: the last three on Home, and every one of them in History. It was
 /// duplicated when History drew its own two-line rows, and the two drifted —
 /// Home had cards with a headline you could read across the room, History had a

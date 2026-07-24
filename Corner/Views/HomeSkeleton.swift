@@ -3,13 +3,15 @@ import SwiftUI
 /// What's on screen while the stored session is being checked.
 ///
 /// The shape of Home rather than a spinner in the middle of nothing. A spinner
-/// says "something is happening"; this says "your dashboard is coming, and here
-/// is where each piece will be" — so the real content arrives into a layout the
-/// eye has already settled on instead of replacing a blank screen.
+/// says "something is happening"; this says "your week is coming, and here is
+/// where it will be" — so the real content arrives into a layout the eye has
+/// already settled on instead of replacing a blank screen.
 ///
-/// Deliberately dumb: no data, no state, nothing to get wrong. It mirrors Home's
-/// metrics — the same 8pt gutter, 18pt corners and square tiles — so the swap is
-/// a fade rather than a jump.
+/// Deliberately dumb: no data, no state, nothing to get wrong. It mirrors the
+/// week strip's metrics so the swap is a fade rather than a jump — which means
+/// it has to be re-measured whenever those move. It drew a hero card, two square
+/// tiles and a recent-sessions block until the dashboard was removed from Home;
+/// a skeleton promising content that never arrives is worse than no skeleton.
 struct HomeSkeleton: View {
 
     /// One slow breath, not a shimmer sweep. This screen is up for a few hundred
@@ -17,22 +19,9 @@ struct HomeSkeleton: View {
     /// anything travelling across the screen draws the eye to the wait itself.
     @State private var dim = false
 
-    /// Was `SummaryCards.gap`, inlined when the dashboard was removed. The
-    /// skeleton still draws the old shape — see the note on this type.
-    private let gap: CGFloat = 8
-
     var body: some View {
-        // Explicit gaps, not one uniform spacing. The real screen doesn't use
-        // one: 26 under the masthead, 8 between the dashboard's own cards, 20
-        // before Recent sessions. A single value made the tiles sit ~18pt low.
         VStack(alignment: .leading, spacing: 0) {
             week
-            hero
-                .padding(.top, 20)
-            tiles
-                .padding(.top, gap)
-            recent
-                .padding(.top, 20)
             Spacer()
         }
         .padding(.horizontal, 16)
@@ -65,49 +54,21 @@ struct HomeSkeleton: View {
                 VStack(spacing: 6) {
                     // 13, matching a `caption2` line box rather than the 10 that
                     // looked about right — the strip is short by three points a
-                    // row otherwise, and everything under it rides up.
+                    // row otherwise.
                     block(width: 24, height: 13, corner: 3)
+                    // 42, tracking `WeekStrip`'s day circles. Move one and this
+                    // has to move with it or the strip jumps on load.
                     Circle()
                         .fill(fill)
-                        .frame(width: 34, height: 34)
+                        .frame(width: 42, height: 42)
                 }
                 // The real cells carry this to reserve room for today's
                 // highlight. Without it the placeholder strip is 22pt shorter
-                // and the whole dashboard below sits high, which is what made
-                // the swap jump.
+                // and everything below sits high, which is what made the swap
+                // jump.
                 .padding(.vertical, 11)
                 .frame(maxWidth: .infinity)
             }
-        }
-    }
-
-    private var hero: some View {
-        // 202: title, caption, the 44pt number and a 68pt chart, plus the card's
-        // own padding. Measured off the real card rather than guessed — 190 left
-        // the tiles under it 12pt high.
-        RoundedRectangle(cornerRadius: 18, style: .continuous)
-            .fill(fill)
-            .frame(height: 202)
-    }
-
-    private var tiles: some View {
-        HStack(spacing: gap) {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(fill)
-                .aspectRatio(1, contentMode: .fit)
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(fill)
-                .aspectRatio(1, contentMode: .fit)
-        }
-    }
-
-    private var recent: some View {
-        VStack(alignment: .leading, spacing: gap) {
-            block(width: 140, height: 18, corner: 5)
-                .padding(.leading, 4)
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(fill)
-                .frame(height: 96)
         }
     }
 
