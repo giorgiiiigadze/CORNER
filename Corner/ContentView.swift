@@ -167,30 +167,11 @@ struct ContentView: View {
             // action rather than a destination was the one control on it that
             // didn't behave like a tab. Writing a session is still Home's job.
         }
-        // The open session lives in the iOS 26 accessory slot above the tab bar,
-        // where Apple Music keeps Now Playing — present on every tab while
-        // there's a session to resume, and *gone entirely* when there isn't.
-        //
-        // The modifier is applied conditionally rather than always-on with an
-        // empty closure: returning no content from `tabViewBottomAccessory`
-        // doesn't reliably collapse the bar — it can leave an empty glass
-        // sliver above the tab bar. Only not applying the modifier at all
-        // guarantees nothing is there. See `sessionAccessory` below.
-        //
-        // This replaces the green pill that sat on Home. A session in progress
-        // isn't a Home thing; it's a state the whole app is in, and the
-        // accessory is the one piece of chrome that's present regardless of
-        // which tab you're on.
-        // Every tab. A session in progress is a state the whole app is in, not a
-        // Home thing — and keeping it on one tab was what made the bar grow and
-        // shrink as you moved between them, since the accessory is part of the
-        // bar's own height.
-        .sessionAccessory(
-            unfinishedToday.map {
-                UnfinishedSession(title: $0.plan.focus, done: $0.done, total: $0.plan.roundCount)
-            },
-            onResume: resumeToday
-        )
+        // No session bar above the tab bar. It lived in the iOS 26 accessory
+        // slot for a while — the Now Playing shape — but the slot clamps to one
+        // line and wouldn't grow to the size the session wanted, and a
+        // hand-drawn pill in its place was chrome the screen doesn't need.
+        // Resuming an unfinished session is the Home card's job now.
         // A tick under the thumb on every change of tab. The system bar doesn't
         // give one on its own, and this is the one control in the app you use
         // without looking at it.
@@ -587,8 +568,7 @@ struct ContentView: View {
                 TodaySessionCard(
                     plan: todayPlan,
                     doneRounds: unfinishedToday?.done ?? 0,
-                    onStart: startToday,
-                    onSomethingElse: todayPlan == nil ? nil : { showingSetup = true }
+                    onStart: startToday
                 )
                 .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
                 .listRowBackground(Color.clear)
@@ -870,26 +850,6 @@ struct SessionLaunch: Identifiable {
     /// Set if the session couldn't be started at all. Shown on the waiting
     /// screen, because by then it's the only screen there is.
     var problem: String?
-}
-
-private extension View {
-    /// Adds the session accessory to the tab bar, or nothing at all.
-    ///
-    /// Conditional at the *modifier* level, not the content level: with a
-    /// session it applies `tabViewBottomAccessory`, and without one it returns
-    /// the view untouched — so when there's nothing to resume the accessory
-    /// slot isn't in the hierarchy at all, rather than an empty bar the system
-    /// might still reserve space for.
-    @ViewBuilder
-    func sessionAccessory(_ session: UnfinishedSession?, onResume: @escaping () -> Void) -> some View {
-        if let session {
-            tabViewBottomAccessory {
-                SessionAccessory(session: session, onResume: onResume)
-            }
-        } else {
-            self
-        }
-    }
 }
 
 #Preview {

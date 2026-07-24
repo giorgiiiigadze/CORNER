@@ -48,8 +48,8 @@ enum Page: String, CaseIterable, Identifiable {
     var icon: String {
         switch self {
         case .home: "house.fill"
-        case .history: "clock.arrow.circlepath"
-        case .coach: "text.bubble.fill"
+        case .history: "calendar.badge.clock"
+        case .coach: "person.fill"
         case .profile: "person.crop.circle.fill"
         case .create: "plus"
         }

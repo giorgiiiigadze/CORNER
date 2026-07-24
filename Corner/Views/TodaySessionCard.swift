@@ -26,10 +26,6 @@ struct TodaySessionCard: View {
     /// that writes one.
     let onStart: () -> Void
 
-    /// Write a different session. Nil hides the row entirely, which is the
-    /// no-plan state: there's nothing to be an alternative *to*.
-    var onSomethingElse: (() -> Void)?
-
     private var isResuming: Bool { plan != nil && doneRounds > 0 }
 
     /// The reminder sheet, and the time it's set to. Local to the card because
@@ -61,7 +57,7 @@ struct TodaySessionCard: View {
 
             if let detail {
                 Text(detail)
-                    .font(.title3)
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .padding(.top, 4)
             }
@@ -77,18 +73,6 @@ struct TodaySessionCard: View {
                     .foregroundStyle(.secondary)
                     .padding(.top, 12)
             }
-
-            if let onSomethingElse {
-                Button(action: onSomethingElse) {
-                    Text("Something else")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                }
-                .buttonStyle(.plain)
-                .padding(.top, 4)
-            }
         }
         .padding(24)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -96,10 +80,10 @@ struct TodaySessionCard: View {
         // top-left corner — the mockup's glow, kept faint so it reads as the
         // card catching the brand rather than a second surface.
         .background {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
                 .fill(Theme.Palette.dashboardSurface)
                 .overlay {
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
                         .fill(
                             LinearGradient(
                                 colors: [Theme.Palette.accent.opacity(0.16), .clear],
@@ -107,13 +91,6 @@ struct TodaySessionCard: View {
                                 endPoint: .center
                             )
                         )
-                }
-                // A hairline of #E1E1E1 to draw the edge off the black. Thin and
-                // near-white, so the card reads as a defined panel rather than a
-                // shape that fades into the background at its corners.
-                .overlay {
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .strokeBorder(Color(red: 0.882, green: 0.882, blue: 0.882), lineWidth: 1)
                 }
         }
         .sheet(isPresented: $pickingTime) { reminderSheet }
