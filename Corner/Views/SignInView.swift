@@ -94,7 +94,7 @@ struct SignInView: View {
             Button(action: submit) {
                 Group {
                     if auth.isWorking {
-                        ProgressView().tint(.white)
+                        ProgressView().tint(.black)
                     } else {
                         Text(isRegistering ? "Create account" : "Sign in")
                             .font(.headline)
@@ -103,7 +103,7 @@ struct SignInView: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: 52)
                 .background(Theme.Palette.accent, in: Theme.buttonShape)
-                .foregroundStyle(.white)
+                .foregroundStyle(.black)
             }
             .disabled(auth.isWorking)
             .padding(.top, 4)

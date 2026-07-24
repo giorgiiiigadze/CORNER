@@ -154,30 +154,10 @@ struct ContentView: View {
             // a destination — `bounce(to:)` below opens the setup sheet and puts
             // the selection straight back where it was, so the bar never shows a
             // fifth page as current.
-            Tab(value: Page.create, role: .search) {
-                Color.clear
-            } label: {
-                // White, against the accent the other four carry. The bar's
-                // tint is the brand red; this one control is the app's primary
-                // action and reads as a separate object, so it takes its own
-                // ink. On the label rather than the `Tab` — `Tab` isn't a view.
-                Label("New session", systemImage: "plus")
-                    .tint(.white)
-            }
-        }
-        .onChange(of: page) { previous, current in
-            guard current == .create else { return }
-            page = previous == .create ? .home : previous
-
-            // Always a new session. Train twice in a day if you want to — the
-            // cornerman's job is to write what you ask for, not to ration it.
-            //
-            // Picking up an unfinished session is still possible and is the
-            // Resume row's job. Two controls, two meanings: this one writes,
-            // that one continues. It used to be one button guessing between
-            // them, which meant a fighter who wanted a second session got given
-            // the first one back.
-            showingSetup = true
+            // The "+" that used to sit here, in the search slot, is gone. The bar
+            // is navigation now and nothing else — a tab whose selection was an
+            // action rather than a destination was the one control on it that
+            // didn't behave like a tab. Writing a session is still Home's job.
         }
         // The open session lives in the iOS 26 accessory slot above the tab bar,
         // where Apple Music keeps Now Playing — present on every tab while
@@ -193,22 +173,20 @@ struct ContentView: View {
         // isn't a Home thing; it's a state the whole app is in, and the
         // accessory is the one piece of chrome that's present regardless of
         // which tab you're on.
+        // Every tab. A session in progress is a state the whole app is in, not a
+        // Home thing — and keeping it on one tab was what made the bar grow and
+        // shrink as you moved between them, since the accessory is part of the
+        // bar's own height.
         .sessionAccessory(
             unfinishedToday.map {
                 UnfinishedSession(title: $0.plan.focus, done: $0.done, total: $0.plan.roundCount)
             },
             onResume: resumeToday
         )
-        // Shrinks to the selected tab as you scroll down, and the session
-        // accessory reflows inline with it — the Apple Music gesture, where the
-        // Now Playing bar tucks into the minimised tab bar. The system does all
-        // of this once the behaviour is set; the accessory just goes along.
-        //
-        // This was `.never` while there were four tabs — collapsing to one read
-        // as the other three vanishing, and the navigation was too wide to lose.
-        // At three it's the standard iOS 26 behaviour and worth the reclaimed
-        // list height.
-        .tabBarMinimizeBehavior(.onScrollDown)
+        // The bar stays put. It used to shrink to the selected tab on scroll —
+        // the Apple Music gesture — which reads as the other tabs vanishing on a
+        // bar this narrow, and buys back a strip of list nobody asked for.
+        .tabBarMinimizeBehavior(.never)
         // White for the selected tab, not the brand red.
         //
         // The accent had four jobs on this screen — the trained ring, the
@@ -445,29 +423,6 @@ struct ContentView: View {
         }
     }
 
-    /// The picked day's numbers, gathered from the same history the dashboard
-    /// already reads. Nil when nothing is picked, which is what puts the cards
-    /// back on the running totals.
-    ///
-    /// Built even for a day with no sessions: "0 rounds, rest day" is an answer,
-    /// and falling back to the totals would silently ignore the tap.
-    private var selectedDayStats: SummaryCards.Day? {
-        guard let selectedDay else { return nil }
-
-        let calendar = Calendar.current
-        let onThatDay = history.filter { calendar.isDate($0.date, inSameDayAs: selectedDay) }
-
-        return SummaryCards.Day(
-            date: selectedDay,
-            // Floored, and summed in seconds first — the same arithmetic
-            // `TrainingStats` uses, so a day's figure can't disagree with the
-            // total it contributes to.
-            minutes: onThatDay.reduce(0) { $0 + ($1.sessionSeconds ?? 0) } / 60,
-            rounds: onThatDay.reduce(0) { $0 + $1.roundsCompleted },
-            sessions: onThatDay.count
-        )
-    }
-
     /// How much of each day's planned work got finished, 0 to 1.
     ///
     /// Summed across the day rather than averaged per session: two sessions of
@@ -496,61 +451,6 @@ struct ContentView: View {
         }
     }
 
-    /// The two controls in Home's navigation bar.
-    ///
-    /// Written the way Apple's own are: a `Button` with a title and a system
-    /// image, and nothing else. Toolbar items take Liquid Glass, their metrics
-    /// and their hit targets from the system on iOS 26 — the first version of
-    /// this set an explicit 52×30 frame inside each one and applied
-    /// `.buttonStyle(.glass)` by hand, which fought the sizing the bar was
-    /// already doing and produced two stretched lozenges that looked like
-    /// nothing else on the phone.
-    ///
-    /// The rule that follows: don't dress a toolbar item. Give it a label and
-    /// let the bar shape it.
-    @ToolbarContentBuilder
-    private var homeBar: some ToolbarContent {
-        ToolbarItem(placement: .topBarLeading) {
-            // Nothing yet. Reminders are the obvious home for this — "you
-            // haven't trained since Tuesday" — and the bell is here because the
-            // layout was asked for, not because that exists.
-            Button {} label: {
-                Image(systemName: "bell.fill")
-                    // Padding on the label, not a frame on the button.
-                    //
-                    // `.controlSize(.extraLarge)` and `.buttonBorderShape(...)`
-                    // are the documented levers and neither does anything in
-                    // this placement — both were tried and both were no-ops. The
-                    // glass capsule hugs whatever it's given, so widening the
-                    // content is what widens the button, and the system still
-                    // owns the height, the material and the corner radius.
-                    .padding(.horizontal, 10)
-            }
-            .accessibilityLabel("Reminders")
-        }
-
-        ToolbarItem(placement: .topBarTrailing) {
-            // A button despite being a readout: a toolbar sizes a bare label
-            // differently from a control, and the two stop looking like a pair.
-            // A hand-built label, because a toolbar collapses `Label` to
-            // icon-only in this placement and `labelStyle` doesn't survive it —
-            // tried on the label and on the button, neither took. A flame with
-            // no number is most of a streak missing.
-            //
-            // What isn't hand-built is the size: no frame, no button style. The
-            // glass sizes itself around whatever it's given, and the first
-            // version's fixed 52×30 is exactly what made these look wrong.
-            Button {} label: {
-                HStack(spacing: 5) {
-                    Image(systemName: "flame.fill")
-                    Text("\(TrainingStats.from(history: history).streak)")
-                        .contentTransition(.numericText())
-                }
-                .padding(.horizontal, 6)
-            }
-            .accessibilityLabel("Training streak")
-        }
-    }
 
     /// The calendar, full width.
     ///
@@ -561,6 +461,57 @@ struct ContentView: View {
         WeekStrip(progress: dayProgress, selection: $selectedDay)
             .padding(.horizontal, -16)
             .padding(.bottom, 10)
+    }
+
+    /// Home's navigation bar: the brand on the left, the person on the right.
+    ///
+    /// Two items and nothing else. In the system bar rather than a row of our own
+    /// in the list, so it gets the scroll-edge treatment, the metrics and the hit
+    /// targets for free — a hand-built header sitting in the content is a bar
+    /// that has to reimplement all three and still scrolls away.
+    /// Home's bar: the wordmark on the left, the person on the right.
+    ///
+    /// The name is a leading item rather than the `navigationTitle`, because an
+    /// inline title is centred by the system and this one belongs on the left.
+    /// Sized to the bar it sits in — an inline bar's height is the constraint,
+    /// and type that ignores it is what made the earlier attempts look wrong.
+    @ToolbarContentBuilder
+    private var homeBar: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            Text("CORNER")
+                // Bebas is condensed and already all caps, so it carries a
+                // larger size in the same width the system face needed at 24.
+                .font(Theme.Fonts.wordmark(30))
+                .kerning(1)
+                .foregroundStyle(.primary)
+                // The bar hands a toolbar item a width and expects it to fit.
+                // Without this the wordmark got squeezed to "C…" rather than
+                // taking the room it needs.
+                .lineLimit(1)
+                .fixedSize()
+                .accessibilityAddTraits(.isHeader)
+        }
+        // Off the glass. iOS 26 gives every bar item the shared Liquid Glass
+        // background, which is right for controls and wrong for a wordmark — it
+        // put the app's name in a capsule that looked like a button.
+        .sharedBackgroundVisibility(.hidden)
+
+        ToolbarItem(placement: .topBarTrailing) {
+            // Straight to Profile rather than a menu — there's one thing behind
+            // this button and it's the page it names.
+            //
+            // A plain symbol rather than the initials disc: this is a toolbar
+            // item, and the bar wants a glyph it can shape and tint like every
+            // other one. The disc is still the face of the Profile page itself,
+            // where it's a portrait rather than a control.
+            Button {
+                page = .profile
+            } label: {
+                Image(systemName: "person.crop.circle")
+                    .padding(.horizontal, 4)
+            }
+            .accessibilityLabel("Your profile")
+        }
     }
 
     // MARK: - Home
@@ -580,6 +531,10 @@ struct ContentView: View {
             // because a session in progress isn't a Home thing, it's a state
             // the whole app is in, and it should be reachable from any tab.
 
+            // The "New session" button that sat here is gone. Nothing opens the
+            // setup sheet now — `showingSetup` has no caller — so whatever
+            // replaces this needs to be the thing that sets it.
+
             // Directly under the card rather than at the foot of the screen: a
             // failure to write today's session is about the card, and an error
             // parked below the dashboard is an error nobody reads.
@@ -591,34 +546,14 @@ struct ContentView: View {
                 }
             }
 
-            // Under today's session rather than over it. Home's job is to get a
-            // fighter training in two taps, and the dashboard is the reason to
-            // train, not the way — a screen that leads with last week's numbers
-            // asks you to read before it lets you work.
-            Section {
-                // Wider than the 8pt inside the dashboard, and deliberately so:
-                // that gap holds a grid together, this one separates two
-                // different subjects — what the numbers say, and what you
-                // actually did. Same spacing for both would read as one long
-                // list of cards.
-                VStack(spacing: 30) {
-                    SummaryCards(stats: TrainingStats.from(history: history), day: selectedDayStats)
-                    RecentSessions(history: history)
-                }
-                    // Zero, not 16. The list style already insets the section,
-                    // and any row inset is charged on top of that — the cards
-                    // were paying the margin twice and coming out narrow.
-                    .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 8, trailing: 0))
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-            }
-            .listSectionMargins(.horizontal, 16)
-
+            // The dashboard that sat here is gone, and so is the recent-sessions
+            // list under it. Home is the week strip and the way into a session
+            // while whatever replaces them is built.
         }
         .toolbar { homeBar }
         // The list's own top inset, trimmed. It's sized for a large title, and
-        // Home doesn't have one — the calendar was sitting a title's worth of
-        // space below a bar with nothing in it but two buttons.
+        // Home's bar is inline — the week strip was sitting a title's worth of
+        // space below a bar with two small items in it.
         .contentMargins(.top, 4, for: .scrollContent)
         .scrollContentBackground(.hidden)
         // The iOS 26 scroll-edge effect, on the top edge only. Content was
@@ -635,11 +570,10 @@ struct ContentView: View {
         // is the page's. A bar tracking down the edge of a screen this short is
         // chrome that reports something the content already makes obvious.
         .scrollIndicators(.hidden)
-        // 8, the same gap the dashboard tiles use between each other. The row
-        // insets above only control padding *inside* a section — the space
-        // between two sections is this, and left at its default it was reading
-        // as a break between two screens rather than a gap between two cards.
-        .listSectionSpacing(SummaryCards.gap)
+        // 8. The row insets above only control padding *inside* a section — the
+        // space between two sections is this, and left at its default it read as
+        // a break between two screens rather than a gap between two cards.
+        .listSectionSpacing(8)
     }
 
     /// Writes today's session and runs it, with the screen up for all of it.

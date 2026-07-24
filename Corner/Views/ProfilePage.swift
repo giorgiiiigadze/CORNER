@@ -162,7 +162,7 @@ struct ProfilePage: View {
             } label: {
                 Group {
                     if isSyncing {
-                        ProgressView().tint(.white)
+                        ProgressView().tint(.black)
                     } else {
                         Text("Back up now").font(.subheadline.weight(.semibold))
                     }
@@ -170,7 +170,7 @@ struct ProfilePage: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: 44)
                 .background(Theme.Palette.accent, in: Theme.buttonShape)
-                .foregroundStyle(.white)
+                .foregroundStyle(.black)
             }
             .disabled(isSyncing)
 

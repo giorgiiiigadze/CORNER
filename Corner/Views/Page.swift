@@ -17,18 +17,22 @@ enum Page: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .home: "Home"
+        // The app's name, not the screen's. Home is the first thing opened and
+        // the large title is where iOS puts a wordmark.
+        case .home: "CORNER"
         case .history: "History"
         case .profile: "Profile"
         case .create: "New session"
         }
     }
 
-    /// Whether the navigation bar names the screen.
+    /// Whether the navigation bar names the screen with a *large* title.
     ///
-    /// False where the screen already introduces itself: Home's toolbar is its
-    /// header, and Profile opens on a face and a name. A large title above
-    /// either is the same word twice.
+    /// False where the screen already introduces itself: Profile opens on a face
+    /// and a name, and a large title above that is the same word twice. Home is
+    /// false too, but for a different reason — it carries the app's wordmark as a
+    /// leading bar item instead, because an inline title centres and this one is
+    /// meant to sit on the left.
     var showsLargeTitle: Bool {
         switch self {
         case .home, .profile, .create: false

@@ -17,7 +17,9 @@ struct HomeSkeleton: View {
     /// anything travelling across the screen draws the eye to the wait itself.
     @State private var dim = false
 
-    private let gap = SummaryCards.gap
+    /// Was `SummaryCards.gap`, inlined when the dashboard was removed. The
+    /// skeleton still draws the old shape — see the note on this type.
+    private let gap: CGFloat = 8
 
     var body: some View {
         // Explicit gaps, not one uniform spacing. The real screen doesn't use

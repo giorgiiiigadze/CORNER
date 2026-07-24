@@ -178,7 +178,7 @@ struct OnboardingFlow: View {
             Button(action: primaryAction) {
                 Group {
                     if savingName || importing {
-                        ProgressView().tint(.white)
+                        ProgressView().tint(.black)
                     } else {
                         Text(primaryTitle).font(.headline)
                     }
@@ -186,7 +186,7 @@ struct OnboardingFlow: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: 54)
                 .background(Theme.Palette.accent, in: Theme.buttonShape)
-                .foregroundStyle(.white)
+                .foregroundStyle(.black)
             }
             .disabled(savingName || importing)
 

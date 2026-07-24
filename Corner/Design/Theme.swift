@@ -33,20 +33,23 @@ enum Theme {
         /// the same on every device rather than tracking the system grey. #212122.
         static let dashboardSurface = Color(red: 0.129, green: 0.129, blue: 0.133)
 
-        /// The one accent. Shared with the timer — it's the brand. #FF002F.
-        static let accent = Color(red: 1.0, green: 0.0, blue: 0.184)
+        /// The one accent. Shared with the timer — it's the brand. #D4FF4F.
+        ///
+        /// A bright lime, which is a different proposition from the red it
+        /// replaced: it carries dark text, not white. Anything that fills with
+        /// this puts *black* on top — see the buttons across the app.
+        static let accent = Color(red: 0.831, green: 1.0, blue: 0.310)
 
-        /// The same red, lifted. #FF3333.
+        /// The accent for the small marks: the streak flame, the ring on a day
+        /// that was trained, the listening dot.
         ///
-        /// For the small marks: the identity square, the streak flame, the ring
-        /// on a day that was trained. `accent` is mixed for large fills against
-        /// white — on a black screen, at the size of a 2pt ring or a 14pt glyph,
-        /// it goes muddy and stops reading as red at all. This is the same hue
-        /// with the brightness a small mark needs to survive.
-        ///
-        /// Two values rather than one everywhere, because the failure runs both
-        /// ways: this one on a full-width button would glare.
-        static let accentLight = Color(red: 1.0, green: 0.2, blue: 0.2)
+        /// It was a lifted red, because the brand red went muddy at the size of a
+        /// 2pt ring on a black screen and needed a brighter twin. The lime has
+        /// the opposite problem — it's already the bright one — so the two values
+        /// are the same colour now. The pair is kept rather than collapsed
+        /// because the two jobs are still different, and a small mark may yet
+        /// want its own value.
+        static let accentLight = accent
 
         static let primaryText = Color(.label)
         static let secondaryText = Color(.secondaryLabel)
@@ -128,7 +131,11 @@ enum Theme {
 
         /// The clock while resting. Same recipe as `work`, same reason — lifted
         /// to survive black, not dropped to survive a pale wash.
-        static let resting = Color(red: 1.0, green: 0.27, blue: 0.24)
+        ///
+        /// Amber, not the red it was. Red left the app with the brand, and amber
+        /// is the better signal for a rest anyway: red reads as *stop*, and a rest
+        /// is the part of the round where the clock is still running.
+        static let resting = Color(red: 1.0, green: 0.62, blue: 0.04)
 
         /// One ink for every state now that the background never moves. Not
         /// `Color(.label)`: that follows the system appearance, and this screen
@@ -167,6 +174,20 @@ enum Theme {
 
     /// Sized to be read from across a room, not from arm's length.
     enum Fonts {
+
+        /// The wordmark. Bebas Neue — a condensed display face, all caps by
+        /// design, which is what the app's name wants and what a UI face like the
+        /// system's deliberately isn't.
+        ///
+        /// The PostScript name, not the filename: `Font.custom` matches on the
+        /// former, and `BebasNeue-Regular.ttf` in `UIAppFonts` only tells iOS
+        /// which file to load. One weight ships, so there's nothing to pick.
+        ///
+        /// `fixedSize` rather than `size`: this is a logo, and a wordmark that
+        /// grows with Dynamic Type stops fitting the bar it lives in.
+        static func wordmark(_ size: CGFloat) -> Font {
+            .custom("BebasNeue-Regular", fixedSize: size)
+        }
         /// Heavier than it was: on a light screen a bold numeral thins out at
         /// three metres in a way it doesn't on black.
         static func timer(_ size: CGFloat = 120) -> Font {

@@ -52,20 +52,23 @@ struct SessionCard: View {
             && record.roundsCompleted >= record.roundsPlanned
     }
 
-    /// Green for a session finished in full, red for anything less.
+    /// The brand lime for a session finished in full, grey for anything less.
     ///
     /// The card's whole surface carries it, so a scroll through History reads as
     /// a record of what actually got done before a single word is read.
+    ///
+    /// Grey rather than a second colour for the unfinished ones. This was green
+    /// against red, and the accent turning lime collapsed that pair into two
+    /// greens a foot apart on the same screen. Colour for the ones you finished,
+    /// its absence for the ones you didn't, says the same thing with one hue.
     private var tint: Color {
-        isComplete ? .green : Theme.Palette.accent
+        isComplete ? Theme.Palette.accent : Color(.systemGray)
     }
 
-    /// Green needs more of itself than red does to reach the same brightness —
-    /// the system green is darker to begin with, so at a shared opacity the
-    /// finished cards came out muddier than the unfinished ones they're meant to
-    /// look better than.
-    private var fillOpacity: Double { isComplete ? 0.22 : 0.18 }
-    private var tileOpacity: Double { isComplete ? 0.28 : 0.24 }
+    /// The lime is bright enough to say its piece at a whisper; the grey needs
+    /// more of itself to lift off the black at all.
+    private var fillOpacity: Double { isComplete ? 0.16 : 0.20 }
+    private var tileOpacity: Double { isComplete ? 0.22 : 0.26 }
 
     /// The Fitness Workout card, in Corner's colours.
     ///
@@ -212,7 +215,7 @@ struct ResumeCard: View {
             Button(action: onResume) {
                 Text(hasStarted ? "Resume" : "Start")
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(.black)
                     .frame(maxWidth: .infinity)
                     .frame(height: 44)
                     .background(Theme.Palette.accent, in: Theme.buttonShape)
@@ -297,15 +300,25 @@ struct SessionAccessory: View {
         // the art and the play sitting hard against the glass; this is the gap
         // Apple Music keeps between its content and the pill.
         .padding(.horizontal, 16)
+        .padding(.vertical, 20)
+        // The accessory takes the height of what it's handed, so this is what
+        // sets it. A *minimum* rather than a fixed height: the padding above
+        // still wins when the type grows, so Dynamic Type can push it taller but
+        // never squeeze it shorter than this.
+        .frame(minHeight: 84)
     }
 
     /// The leading square. A plain filled box, no mark inside — the album-art
     /// slot Apple Music keeps, the same footprint a real session thumbnail would
-    /// take if there's ever one to show. #FF0436.
+    /// take if there's ever one to show.
+    ///
+    /// The brand colour, not the hardcoded red it was: that value predated the
+    /// accent moving to lime and was the last thing on the bar still carrying the
+    /// old palette.
     private var artwork: some View {
-        RoundedRectangle(cornerRadius: 7, style: .continuous)
-            .fill(Color(red: 1.0, green: 0.016, blue: 0.212))
-            .frame(width: 30, height: 30)
+        RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .fill(Theme.Palette.accent)
+            .frame(width: 36, height: 36)
     }
 }
 

@@ -36,7 +36,10 @@ struct WeekStrip: View {
     /// Fixed rather than divided by seven: the strip scrolls now, so a slot has
     /// to be one width everywhere instead of a fraction of a screen that only
     /// happens to fit the current week.
-    private static let slot: CGFloat = 46
+    ///
+    /// Widened with the day circles: at 46 a 42pt circle left 2pt a side, and the
+    /// highlight behind it had nothing to sit in.
+    private static let slot: CGFloat = 56
 
     private let calendar = Calendar.current
 
@@ -64,7 +67,7 @@ struct WeekStrip: View {
                         Text(day, format: .dateTime.day())
                             .font(.subheadline.weight(isToday(day) ? .bold : .regular))
                             .foregroundStyle(number(for: day))
-                            .frame(width: 34, height: 34)
+                            .frame(width: 42, height: 42)
                             .background { ring(for: day) }
                     }
                     // The padding is on every cell, not just today's — it's what
@@ -128,35 +131,35 @@ struct WeekStrip: View {
                 // it a half-finished session reads as a broken circle rather
                 // than as half of a whole one — the missing part is the point.
                 Circle()
-                    .strokeBorder(Color(.quaternaryLabel), lineWidth: 2)
+                    .strokeBorder(Color(.quaternaryLabel), lineWidth: 3)
 
                 Circle()
                     // `strokeBorder` insets by half the line width; `stroke` on
                     // a trimmed shape doesn't, so the path is inset by hand to
                     // keep both rings on exactly the same circle.
-                    .inset(by: 1)
+                    .inset(by: 1.5)
                     .trim(from: 0, to: fraction)
-                    .stroke(Theme.Palette.accentLight, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                    .stroke(Theme.Palette.accentLight, style: StrokeStyle(lineWidth: 3, lineCap: .round))
                     // Twelve o'clock, not three: a ring that starts at the right
                     // edge reads as an arbitrary arc, one that starts at the top
                     // reads as a dial being filled.
                     .rotationEffect(.degrees(-90))
             }
         } else if isToday(day) {
-            Circle().strokeBorder(Color(.label), lineWidth: 2)
+            Circle().strokeBorder(Color(.label), lineWidth: 3)
         } else if isPast(day) {
             // Dashed for a day that came and went without work. A solid ring
             // reads as a container waiting to be filled; a broken one reads as
             // a gap, which is what a missed day is.
             Circle().strokeBorder(
                 Color(.quaternaryLabel),
-                style: StrokeStyle(lineWidth: 1.5, dash: [3, 3])
+                style: StrokeStyle(lineWidth: 2.5, dash: [3, 3])
             )
         } else {
             // Solid, and quiet, for the days ahead. They haven't been missed —
             // drawing them like the misses behind you would be a reproach for
             // something that hasn't happened.
-            Circle().strokeBorder(Color(.quaternaryLabel), lineWidth: 1.5)
+            Circle().strokeBorder(Color(.quaternaryLabel), lineWidth: 2.5)
         }
     }
 

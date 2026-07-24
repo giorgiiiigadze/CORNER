@@ -29,34 +29,74 @@ struct RecentSessions: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: SummaryCards.gap) {
-            Text("Recent sessions")
-                .font(.headline.weight(.semibold))
-                .foregroundStyle(.primary)
-                // Aligns the heading with the card corners below it rather than
-                // the screen edge — the cards are what it's naming.
-                .padding(.leading, 4)
+        VStack(alignment: .leading, spacing: 0) {
+            // The system's own section heading: small, uppercase, tracked out and
+            // grey. Home used a `.headline` in white here, which is the weight a
+            // *title* carries — this is a label on a list, and the list under it
+            // is what should be read first.
+            Text("RECENT")
+                .font(.caption.weight(.semibold))
+                .kerning(0.6)
+                .foregroundStyle(.secondary)
+                .padding(.bottom, 10)
 
             if recent.isEmpty {
                 empty
             } else {
-                // A card each, not one card of hairline-separated rows. A
-                // session is a thing that happened, with a headline worth
-                // reading at a glance — rows made three of them into a table,
-                // and a table is what the History tab is for.
-                ForEach(recent) { record in
-                    SessionCard(record: record)
+                // Plain rows on the black, hairline-separated, with a chevron —
+                // the native list Settings and Health are built from. The cards
+                // that used to be here are still the right thing on History,
+                // where a session is the subject; on Home the dashboard is the
+                // subject and this is a list beneath it.
+                ForEach(Array(recent.enumerated()), id: \.element.id) { index, record in
+                    row(record)
+
+                    if index < recent.count - 1 {
+                        Divider()
+                            .overlay(Theme.Palette.hairline)
+                    }
                 }
             }
         }
     }
 
+    /// Title over "6 rounds · Yesterday", with the chevron on the right.
+    private func row(_ record: TrainingRecord) -> some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(record.title)
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                Text(subtitle(record))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            Image(systemName: "chevron.right")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.vertical, 12)
+        .contentShape(.rect)
+    }
+
+    /// "6 rounds · Yesterday" — the two facts a glance wants, on one line.
+    private func subtitle(_ record: TrainingRecord) -> String {
+        let rounds = record.roundsCompleted == 1 ? "1 round" : "\(record.roundsCompleted) rounds"
+        let when = record.date.formatted(.relative(presentation: .named)).localizedCapitalized
+        return "\(rounds) \u{00B7} \(when)"
+    }
+
     private var empty: some View {
         Text("Your finished sessions land here.")
             .font(.subheadline)
-            .foregroundStyle(Theme.Palette.accent)
+            .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(14)
-            .background(Theme.Palette.dashboardSurface, in: .rect(cornerRadius: 18))
+            .padding(.vertical, 12)
     }
 }

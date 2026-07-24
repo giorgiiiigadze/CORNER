@@ -23,6 +23,14 @@
 	     and the timer exists only inside the app. -->
 	<key>NSSupportsLiveActivities</key>
 	<true/>
+	<!-- The wordmark's face. Bundled rather than relying on a system font: the
+	     header is the app's name and it should look the same on every phone.
+	     The path is relative to the bundle root, and the name to *use* in code is
+	     the PostScript name — "BebasNeue-Regular" — not this filename. -->
+	<key>UIAppFonts</key>
+	<array>
+		<string>BebasNeue-Regular.ttf</string>
+	</array>
 	<!-- Apple Health. These live in the base plist rather than as
 	     INFOPLIST_KEY_* build settings because the HealthKit usage keys aren't
 	     on Xcode's whitelist of known keys - an arbitrary one is silently

@@ -140,7 +140,7 @@ struct ManageProfileView: View {
             HStack(spacing: 12) {
                 Image(systemName: "heart.fill")
                     .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(.black)
                     .frame(width: 40, height: 40)
                     .background(Theme.Palette.accent, in: .rect(cornerRadius: 10, style: .continuous))
 
@@ -160,7 +160,7 @@ struct ManageProfileView: View {
             } label: {
                 Group {
                     if importing {
-                        ProgressView().tint(.white)
+                        ProgressView().tint(.black)
                     } else {
                         Text("Fill in from Apple Health")
                             .font(.subheadline.weight(.semibold))
@@ -169,7 +169,7 @@ struct ManageProfileView: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: 46)
                 .background(Theme.Palette.accent, in: Theme.buttonShape)
-                .foregroundStyle(.white)
+                .foregroundStyle(.black)
             }
             .disabled(importing)
 
