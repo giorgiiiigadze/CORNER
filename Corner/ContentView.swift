@@ -412,6 +412,27 @@ struct ContentView: View {
         return Image(uiImage: uiImage.withRenderingMode(.alwaysOriginal))
     }
 
+    /// The Today card's Start button. Trains today's plan — from the top or
+    /// picking up where it stopped — and, with no plan or one already finished,
+    /// opens the sheet that writes a new one instead.
+    ///
+    /// The two callers are the same button in its two states: `resumeToday`
+    /// already sorts fresh from mid-session off `unfinishedToday`, so all this
+    /// adds is the fork to setup when there's nothing left to run.
+    private func startToday() {
+        // A reminder to begin the session is noise once it's begun. Cancelled
+        // here rather than in the card so it clears however the session starts.
+        if let plan = todayPlan {
+            SessionReminder.cancel(sessionID: plan.sessionID)
+        }
+
+        if unfinishedToday != nil {
+            resumeToday()
+        } else {
+            showingSetup = true
+        }
+    }
+
     private func resumeToday() {
         guard let (plan, done) = unfinishedToday, let session = plan.session else { return }
 
@@ -555,14 +576,24 @@ struct ContentView: View {
             // short of the bezel and make it read as clipped.
             .listSectionMargins(.horizontal, 0)
 
-            // The open session used to sit here, above the dashboard. It moved
-            // to the tab bar accessory — see `tabViewBottomAccessory` above —
-            // because a session in progress isn't a Home thing, it's a state
-            // the whole app is in, and it should be reachable from any tab.
-
-            // The "New session" button that sat here is gone. Nothing opens the
-            // setup sheet now — `showingSetup` has no caller — so whatever
-            // replaces this needs to be the thing that sets it.
+            // The way into a session, and the reason Home exists. Draws today's
+            // plan when there's one to draw and opens the setup sheet when
+            // there isn't — see `TodaySessionCard` for the two states.
+            //
+            // The open session also rides in the tab-bar accessory, present on
+            // every tab; this card is the Home-screen face of the same fact,
+            // with room for the plan's shape and a second way out.
+            Section {
+                TodaySessionCard(
+                    plan: todayPlan,
+                    doneRounds: unfinishedToday?.done ?? 0,
+                    onStart: startToday,
+                    onSomethingElse: todayPlan == nil ? nil : { showingSetup = true }
+                )
+                .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+            }
 
             // Directly under the card rather than at the foot of the screen: a
             // failure to write today's session is about the card, and an error

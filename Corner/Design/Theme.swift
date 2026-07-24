@@ -33,12 +33,12 @@ enum Theme {
         /// the same on every device rather than tracking the system grey. #212122.
         static let dashboardSurface = Color(red: 0.129, green: 0.129, blue: 0.133)
 
-        /// The one accent. Shared with the timer — it's the brand. #D4FF4F.
+        /// The one accent. Shared with the timer — it's the brand. #E5FF00.
         ///
-        /// A bright lime, which is a different proposition from the red it
+        /// A bright acid lime, which is a different proposition from the red it
         /// replaced: it carries dark text, not white. Anything that fills with
         /// this puts *black* on top — see the buttons across the app.
-        static let accent = Color(red: 0.831, green: 1.0, blue: 0.310)
+        static let accent = Color(red: 0.898, green: 1.0, blue: 0.0)
 
         /// The accent for the small marks: the streak flame, the ring on a day
         /// that was trained, the listening dot.
