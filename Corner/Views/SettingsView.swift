@@ -23,6 +23,9 @@ struct SettingsView: View {
     @AppStorage(SessionEngine.coachingKey) private var speaksCoaching: Bool = true
     @AppStorage(SettingsView.voiceNameKey) private var cornermanVoiceName: String = ""
 
+    /// The "get ready" beat before the first bell. Zero is off.
+    @AppStorage(SessionEngine.countdownKey) private var countdownSeconds: Int = 3
+
     /// The one thing the generator can't learn by watching you train. Moved
     /// here when the Coach tab was removed — it's a single choice that shapes
     /// every written session, and losing the only control for it would have
@@ -68,6 +71,18 @@ struct SettingsView: View {
                         // control whose "on" state is the good one.
                         .tint(.green)
                 }
+            }
+            .listRowBackground(Theme.Palette.surface)
+
+            Section {
+                Picker("Get ready", selection: $countdownSeconds) {
+                    Text("Off").tag(0)
+                    ForEach([3, 5, 10, 15], id: \.self) { seconds in
+                        Text("\(seconds) seconds").tag(seconds)
+                    }
+                }
+            } footer: {
+                Text("A countdown before the first bell, to put the phone down and get your hands up.")
             }
             .listRowBackground(Theme.Palette.surface)
 

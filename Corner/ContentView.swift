@@ -48,6 +48,10 @@ struct ContentView: View {
     /// point.
     @AppStorage(SessionEngine.coachingKey) private var speaksCoaching: Bool = true
 
+    /// The "get ready" beat before the first bell. Handed to the engine at build
+    /// time, the same way the coaching preference is.
+    @AppStorage(SessionEngine.countdownKey) private var countdownSeconds: Int = 3
+
     /// The live screen, from the tap that asks for a session to the end of it.
     ///
     /// Not the engine any more. The engine can't exist until the plan does, and
@@ -77,6 +81,11 @@ struct ContentView: View {
     /// Whether it's on screen right now. Separate from `hasSeenWelcome` because
     /// the sheet doesn't appear the instant it's owed — see `offerWelcome`.
     @State private var showingWelcome = false
+
+    /// First-run setup for a brand-new account: the intro, a name, Apple Health.
+    /// Driven by `auth.isNewAccount`, which only a sign-up sets — a returning
+    /// fighter signing in goes straight to Home.
+    @State private var showingOnboarding = false
 
     /// Whether the splash is still up. Home is built and running underneath it,
     /// so this is the only honest signal that the fighter can see anything.
@@ -237,6 +246,19 @@ struct ContentView: View {
                 // a single button pinned to the bottom.
                 .presentationDetents([.large])
                 .presentationDragIndicator(.hidden)
+        }
+        // First-run setup, ahead of the welcome sheet: a new account gets the
+        // full flow, and marking the welcome seen on the way out means the sheet
+        // never also fires for them.
+        .task(id: auth.isNewAccount) {
+            if auth.isNewAccount { showingOnboarding = true }
+        }
+        .fullScreenCover(isPresented: $showingOnboarding) {
+            OnboardingFlow {
+                hasSeenWelcome = true
+                auth.acknowledgeNewAccount()
+                showingOnboarding = false
+            }
         }
         .sheet(isPresented: $showingSetup) {
             SessionSetupSheet(request: $request) {
@@ -712,14 +734,15 @@ struct ContentView: View {
     /// Keyed on `isLaunching`, so a slow restore that keeps the splash up
     /// longer simply moves the whole thing later rather than racing it.
     private func offerWelcome() async {
-        guard !isLaunching, !hasSeenWelcome else { return }
+        // A new account gets the full setup flow instead — never both.
+        guard !isLaunching, !hasSeenWelcome, !auth.isNewAccount, !showingOnboarding else { return }
 
         try? await Task.sleep(for: .seconds(1.5))
 
         // Re-checked: the sleep is cancellable and 1.5 seconds is long enough
         // for them to have gone somewhere else, or for the sheet to have been
         // dealt with on another path.
-        guard !Task.isCancelled, !hasSeenWelcome else { return }
+        guard !Task.isCancelled, !hasSeenWelcome, !showingOnboarding else { return }
         showingWelcome = true
     }
 
@@ -818,6 +841,7 @@ struct ContentView: View {
             voice: voice,
             recognizer: SpeechAnalyzerRecognizer(),
             speaksCoaching: speaksCoaching,
+            countdownSeconds: countdownSeconds,
             // Same key as the session writer, and the same shrug when there
             // isn't one: no key means the phrase list, which still works.
             intent: CommandInterpreter(client: ClaudeClient.viaProxy(token: { [auth] in await auth.token() }))

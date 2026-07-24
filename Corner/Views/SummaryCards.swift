@@ -40,8 +40,14 @@ struct SummaryCards: View {
 
     /// "Sun 19 Jul" — long enough to be unambiguous when you've scrolled back
     /// two months, short enough for a caption.
+    ///
+    /// Today gets named as well as dated: "Today, 24 Jul". Picking today off the
+    /// strip and getting back a bare date reads like any other day in the past,
+    /// when it's the one day still being added to.
     private var dayCaption: String {
-        day.map { $0.date.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)) } ?? ""
+        guard let day else { return "" }
+        let date = day.date.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
+        return isToday(day.date) ? "Today, \(date)" : date
     }
 
     /// 8, not 12 — the tiles read as one block this way rather than as cards
@@ -76,6 +82,9 @@ struct SummaryCards: View {
             }
 
         }
+        // A little breathing room above the hero, so the week strip sitting
+        // directly over it doesn't crowd the top card.
+        .padding(.top, 8)
     }
 
     // MARK: - Cards
@@ -112,11 +121,11 @@ struct SummaryCards: View {
             .chartXAxis {
                 AxisMarks(values: .stride(by: .day)) { value in
                     AxisValueLabel(format: .dateTime.weekday(.narrow), centered: true)
-                        .font(.caption2)
+                        .font(.caption2.weight(.medium))
                         .foregroundStyle(Color(.secondaryLabel))
                 }
             }
-            .frame(height: 68)
+            .frame(height: 52)
             // The accent moving between bars must not be animated. Picking a day
             // is wrapped in `withAnimation` so the numbers roll, and Charts
             // inherits that — which re-interpolated every bar and read as the
@@ -155,7 +164,7 @@ struct SummaryCards: View {
                 // different kind of measurement rather than the same one,
                 // singled out.
                 .foregroundStyle(
-                    Theme.Palette.chart.opacity(isHighlighted(entry.date) ? 1 : 0.35)
+                    Theme.Palette.accent.opacity(isHighlighted(entry.date) ? 1 : 0.35)
                 )
                 .cornerRadius(2)
             }
@@ -174,7 +183,7 @@ struct SummaryCards: View {
                         .foregroundStyle(Theme.Palette.chartGrid)
 
                     AxisValueLabel(format: .dateTime.weekday(.narrow), centered: true)
-                        .font(.system(size: 9))
+                        .font(.system(size: 9, weight: .medium))
                         .foregroundStyle(Color(.secondaryLabel))
                 }
             }
@@ -288,7 +297,7 @@ private struct Card<Content: View>: View {
         // because it has a sparkline to be taller than.
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(14)
-        .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 16))
+        .background(Theme.Palette.dashboardSurface, in: .rect(cornerRadius: 12))
     }
 }
 
@@ -299,7 +308,7 @@ private struct Chevron: View {
     var body: some View {
         Image(systemName: "chevron.right")
             .font(.caption2.weight(.bold))
-            .foregroundStyle(Color(.secondarySystemGroupedBackground))
+            .foregroundStyle(Theme.Palette.dashboardSurface)
             .padding(5)
             .background(.quaternary, in: .circle)
             // Decoration, not a control — the card itself is what a fighter
@@ -335,7 +344,7 @@ private struct Big: View {
 
     var body: some View {
         Text(value)
-            .font(.system(size: 32, weight: .bold, design: .rounded))
+            .font(.system(size: 32, weight: .medium, design: .rounded))
             .foregroundStyle(.primary)
             .contentTransition(.numericText())
     }

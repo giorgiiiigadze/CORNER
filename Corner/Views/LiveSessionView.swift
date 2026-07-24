@@ -11,6 +11,10 @@ struct LiveSessionView: View {
     @State private var startupError: String?
     @Environment(\.dismiss) private var dismiss
 
+    /// The chosen "get ready" length, read here only so the ring knows what a
+    /// full circle is worth. The engine reads it independently to run the clock.
+    @AppStorage(SessionEngine.countdownKey) private var countdownSeconds: Int = 3
+
     /// The Lock Screen's copy of the clock. Owned here because this view owns
     /// every exit, and an activity that outlives its session is a stuck timer.
     @State private var liveActivity = SessionLiveActivity()
@@ -57,6 +61,20 @@ struct LiveSessionView: View {
         // whatever the phone is set to.
         .preferredColorScheme(.dark)
         .persistentSystemOverlays(.hidden)
+        // "Get ready", over the top of the built session, so the first bell lands
+        // the moment it clears. Driven by the engine, so it shows whether the
+        // session was started by the button or by "let's go".
+        .overlay {
+            if let remaining = engine.countdownRemaining {
+                SessionCountdown(
+                    remaining: remaining,
+                    total: countdownSeconds,
+                    title: engine.sessionTitle
+                )
+                .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: engine.countdownRemaining == nil)
         .task { await startListening() }
         // The premise is that you never touch the phone — which means iOS never
         // sees a touch, and locks the screen out from under a running workout.

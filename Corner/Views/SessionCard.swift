@@ -283,7 +283,7 @@ extension View {
         padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                Color(.secondarySystemGroupedBackground),
+                Theme.Palette.dashboardSurface,
                 in: .rect(cornerRadius: 18)
             )
     }

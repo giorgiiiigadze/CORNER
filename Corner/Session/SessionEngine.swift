@@ -119,6 +119,10 @@ final class SessionEngine {
     // MARK: - Collaborators
 
     private let session: Session
+
+    /// What today's session is called. The session itself stays private — this is
+    /// the one part of it the screen needs to name, on the countdown.
+    var sessionTitle: String { session.title }
     private let voice: any Voice
     private let recognizer: any VoiceRecognizer
     private let ticker: any Ticker
@@ -215,11 +219,29 @@ final class SessionEngine {
     /// to tell a heard command from a missed one.
     private let speaksCoaching: Bool
 
+    /// Where the pre-session countdown length lives. Same arrangement as
+    /// `coachingKey`: read at the call site so tests can set it without touching
+    /// `UserDefaults`.
+    nonisolated static let countdownKey = "cornerman.countdownSeconds"
+
+    /// How many seconds of "get ready" run before the first bell. Zero is off,
+    /// and off means the session starts the instant it's told to, exactly as it
+    /// did before this existed.
+    private let countdownSeconds: Int
+
+    /// Seconds left on that countdown, or nil when one isn't running.
+    ///
+    /// Published rather than kept inside `runSession` so the screen can put the
+    /// ring up — and so it covers every way a session starts, the button and
+    /// "let's go" alike, instead of only the one the view knows about.
+    private(set) var countdownRemaining: Int?
+
     init(
         session: Session,
         voice: any Voice,
         recognizer: any VoiceRecognizer,
         speaksCoaching: Bool = true,
+        countdownSeconds: Int = 0,
         // Nil means the phrase list is the whole story — no key, or a caller
         // that doesn't want the network. The session runs identically either
         // way; it just understands fewer ways of saying things.
@@ -234,6 +256,7 @@ final class SessionEngine {
         self.voice = voice
         self.recognizer = recognizer
         self.speaksCoaching = speaksCoaching
+        self.countdownSeconds = countdownSeconds
         self.intent = intent
         self.ticker = ticker
         self.bell = bell ?? Bell()
@@ -298,6 +321,8 @@ final class SessionEngine {
         await voice.stopPrewarming()
         await recognizer.stop()
         isListening = false
+        // A session torn down mid-countdown must not leave the ring on screen.
+        countdownRemaining = nil
         phase = .idle
         isFinished = true
     }
@@ -522,6 +547,23 @@ final class SessionEngine {
     private func runSession() async {
         var index = 0
         var rounds = session.rounds
+
+        // "Get ready" — a few seconds between saying go and the work starting,
+        // so the phone can be put down and the gloves got on. Ahead of the intro
+        // rather than after it: the point is the gap between the decision and the
+        // first bell, and the intro is already part of the session.
+        if countdownSeconds > 0 {
+            for remaining in stride(from: countdownSeconds, through: 1, by: -1) {
+                guard !Task.isCancelled else {
+                    countdownRemaining = nil
+                    return
+                }
+                countdownRemaining = remaining
+                try? await ticker.sleep(for: .seconds(1))
+            }
+            countdownRemaining = nil
+            guard !Task.isCancelled else { return }
+        }
 
         // Before the first bell: what today is for, and the one thing to hold
         // onto all the way through.

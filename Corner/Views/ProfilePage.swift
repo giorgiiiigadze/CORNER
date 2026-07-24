@@ -27,7 +27,6 @@ struct ProfilePage: View {
         ScrollView {
             VStack(spacing: 28) {
                 identity
-                totals
                 if hasBodyStats { bodyStats }
                 backup
             }
@@ -82,24 +81,11 @@ struct ProfilePage: View {
         }
     }
 
-    // MARK: - Totals
+    // MARK: - Stat item
 
-    /// Three numbers in a row, big over small. The all-time figures, not this
-    /// week's: Home already answers "am I still going", and this answers "what
-    /// have I done", which is the question a profile is for.
-    private var totals: some View {
-        // Sized to their content and grouped in the middle, rather than three
-        // equal thirds spread across the width. That's what keeps them reading
-        // as one line under the name instead of as a row of separate columns —
-        // and it's why the reference needs no rules between them.
-        HStack(spacing: 34) {
-            total("\(stats.totalSessions)", "Sessions")
-            total("\(stats.totalRounds)", "Rounds")
-            total("\(stats.minutesTotal)", "Minutes")
-        }
-        .frame(maxWidth: .infinity)
-    }
-
+    /// One big-over-small figure, grouped in the middle with its siblings rather
+    /// than spread across the width — what keeps them reading as one line under
+    /// the name instead of a row of separate columns.
     private func total(_ value: String, _ label: String) -> some View {
         VStack(spacing: 2) {
             Text(value)

@@ -21,11 +21,20 @@ struct ManageProfileView: View {
     @State private var importing = false
     @State private var importNote: String?
 
+    /// Everything Health could fill is already filled. The import card hides once
+    /// this is true — it exists to populate empty fields, not to sit around after.
+    private var healthComplete: Bool {
+        auth.heightCm != nil && auth.weightKg != nil && auth.birthdate != nil
+    }
+
     var body: some View {
         List {
             avatarHeader
 
-            if health.isAvailable {
+            // Only while there's still something for it to fill. Once height,
+            // weight and date of birth are all set, the card has done its job and
+            // would just be a button that re-reads what's already there.
+            if health.isAvailable && !healthComplete {
                 Section {
                     healthCard
                 }
@@ -38,21 +47,11 @@ struct ManageProfileView: View {
                     TextFieldEditor(
                         title: "Name",
                         placeholder: "Your name",
-                        initial: auth.displayName ?? ""
+                        initial: auth.displayName ?? "",
+                        headline: "What should we call you?"
                     ) { await auth.updateProfile(displayName: $0) }
                 } label: {
                     ProfileRow(title: "Name", value: auth.displayName, placeholder: "Add")
-                }
-
-                NavigationLink {
-                    TextFieldEditor(
-                        title: "Bio",
-                        placeholder: "A line about you",
-                        initial: auth.bio ?? "",
-                        axis: .vertical
-                    ) { await auth.updateProfile(bio: $0) }
-                } label: {
-                    ProfileRow(title: "Bio", value: auth.bio, placeholder: "Add")
                 }
             }
             .listRowBackground(Theme.Palette.surface)
@@ -276,6 +275,7 @@ private struct TextFieldEditor: View {
     let placeholder: String
     let initial: String
     var axis: Axis = .horizontal
+    var headline: String? = nil
     let save: (String) async -> Bool
 
     @Environment(\.dismiss) private var dismiss
@@ -289,46 +289,79 @@ private struct TextFieldEditor: View {
         placeholder: String,
         initial: String,
         axis: Axis = .horizontal,
+        headline: String? = nil,
         save: @escaping (String) async -> Bool
     ) {
         self.title = title
         self.placeholder = placeholder
         self.initial = initial
         self.axis = axis
+        self.headline = headline
         self.save = save
         _text = State(initialValue: initial)
     }
 
     var body: some View {
-        List {
-            Section {
-                TextField(placeholder, text: $text, axis: axis)
-                    .focused($focused)
-                    .lineLimit(axis == .vertical ? 3 : 1, reservesSpace: axis == .vertical)
-                    .submitLabel(.done)
-                    .onSubmit { if axis == .horizontal { Task { await commit() } } }
-            } footer: {
-                if failed {
-                    Text("Couldn't save. Check your connection and try again.")
-                        .foregroundStyle(Theme.Palette.accent)
-                }
+        VStack(spacing: 16) {
+            // A quiet white line above the field, so the screen asks rather than
+            // just presents a box.
+            if let headline {
+                Text(headline)
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 24)
             }
-            .listRowBackground(Theme.Palette.surface)
+
+            // Big and borderless — the field is the screen, the same shape the
+            // name step in onboarding uses. The placeholder greys out at the size
+            // the typed value will land, so nothing shifts when they start.
+            TextField("", text: $text, prompt: Text(placeholder).foregroundColor(.secondary), axis: axis)
+                .font(.system(size: 34, weight: .bold))
+                .multilineTextAlignment(.center)
+                .focused($focused)
+                .lineLimit(axis == .vertical ? 3 : 1, reservesSpace: axis == .vertical)
+                .submitLabel(.done)
+                .onSubmit { if axis == .horizontal { Task { await commit() } } }
+                .padding(.top, 24)
+
+            if failed {
+                Text("Couldn't save. Check your connection and try again.")
+                    .font(.footnote)
+                    .foregroundStyle(Theme.Palette.accent)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            Spacer()
+
+            // Pinned to the bottom, above the keyboard, and white — the primary
+            // action of a screen that does exactly one thing.
+            Button { Task { await commit() } } label: {
+                Group {
+                    if saving {
+                        ProgressView().tint(.black)
+                    } else {
+                        Text("Save").font(.headline)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 54)
+                .background(.white, in: Theme.buttonShape)
+                .foregroundStyle(.black)
+            }
+            .disabled(saving || text == initial)
         }
-        .scrollContentBackground(.hidden)
+        .padding(.horizontal, 16)
+        .padding(.top, 16)
+        // Keeps the Save button off the top of the keyboard.
+        .padding(.bottom, 12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Theme.Palette.background)
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                if saving {
-                    ProgressView()
-                } else {
-                    Button("Save") { Task { await commit() } }
-                        .disabled(text == initial)
-                }
-            }
-        }
+        // Opens the keyboard the instant the screen does, so there's nothing to
+        // tap before typing.
         .onAppear { focused = true }
     }
 

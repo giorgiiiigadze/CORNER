@@ -28,6 +28,11 @@ enum Theme {
         /// Cards and rows, lifted off the background by a hair.
         static let surface = Color(.secondarySystemGroupedBackground)
 
+        /// The raised cards — dashboard tiles and session cards. A touch lighter
+        /// than `surface`'s dark resolve, pinned to an exact value so they read
+        /// the same on every device rather than tracking the system grey. #212122.
+        static let dashboardSurface = Color(red: 0.129, green: 0.129, blue: 0.133)
+
         /// The one accent. Shared with the timer — it's the brand. #FF002F.
         static let accent = Color(red: 1.0, green: 0.0, blue: 0.184)
 

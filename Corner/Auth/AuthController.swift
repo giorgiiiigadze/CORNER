@@ -62,6 +62,18 @@ final class AuthController {
     /// person signing in on this phone sees their own history rather than the
     /// last person's.
     private(set) var userID: String?
+
+    /// True for exactly the session that just created the account, so the app can
+    /// run first-time setup — the intro, a name, connecting Apple Health — for a
+    /// new fighter and skip all of it for someone signing back in.
+    ///
+    /// In-memory on purpose: it's a fact about *this* launch, not the account.
+    /// A returning user is `signIn`, which never sets it; and it resets on the
+    /// next launch, so setup can't reappear on a relaunch even if it's not
+    /// explicitly cleared. `acknowledgeNewAccount()` clears it the moment setup
+    /// is done so it doesn't re-present within the same run.
+    private(set) var isNewAccount = false
+
     private(set) var problem: String?
     private(set) var notice: String?
     private(set) var isWorking = false
@@ -231,6 +243,12 @@ final class AuthController {
         await attempt(path: "signup", email: email, password: password)
     }
 
+    /// Called by the setup flow when it's finished (or the fighter skipped it),
+    /// so a new account is only ever offered onboarding once per run.
+    func acknowledgeNewAccount() {
+        isNewAccount = false
+    }
+
     func signOut() {
         // A deliberate sign-out ends the offline-verify wait too — there's no
         // session left to verify.
@@ -243,6 +261,7 @@ final class AuthController {
         notice = nil
         email = nil
         userID = nil
+        isNewAccount = false
         // Cleared with the rest of the identity. Left behind, the next person to
         // sign in on this phone would be greeted by the last one's name — and,
         // now, the last one's height and weight — until their own profile came
@@ -289,6 +308,10 @@ final class AuthController {
             // session — the account exists and is waiting on a click in an
             // inbox.
             if started {
+                // Only a sign-up that opened a session is a new account. Sign-in
+                // takes the same path but "signup" is unique to the other caller,
+                // so this can't misfire for a returning fighter.
+                isNewAccount = (path == "signup")
                 state = .signedIn
                 Task { await loadProfile() }
             } else {

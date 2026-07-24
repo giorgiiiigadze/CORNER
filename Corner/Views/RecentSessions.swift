@@ -54,9 +54,9 @@ struct RecentSessions: View {
     private var empty: some View {
         Text("Your finished sessions land here.")
             .font(.subheadline)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Theme.Palette.accent)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(14)
-            .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 18))
+            .background(Theme.Palette.dashboardSurface, in: .rect(cornerRadius: 18))
     }
 }
