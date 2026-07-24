@@ -481,7 +481,7 @@ struct ContentView: View {
             Text("CORNER")
                 // Bebas is condensed and already all caps, so it carries a
                 // larger size in the same width the system face needed at 24.
-                .font(Theme.Fonts.wordmark(30))
+                .font(Theme.Fonts.wordmark(36))
                 .kerning(1)
                 .foregroundStyle(.primary)
                 // The bar hands a toolbar item a width and expects it to fit.
@@ -507,7 +507,7 @@ struct ContentView: View {
             Button {
                 page = .profile
             } label: {
-                Image(systemName: "person.crop.circle")
+                Image(systemName: "person.fill")
                     .padding(.horizontal, 4)
             }
             .accessibilityLabel("Your profile")
