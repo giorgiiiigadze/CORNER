@@ -348,19 +348,6 @@ struct ContentView: View {
         plans.first { Calendar.current.isDateInToday($0.generatedAt) }
     }
 
-    /// Rounds finished against one plan, across however many sittings it took.
-    ///
-    /// Per plan, not per day. Counting the day's total was right while a day
-    /// held one session and wrong the moment it could hold two: finishing an
-    /// eight-round session and then starting a six-round one left the day's
-    /// count already past the second plan's total, so a session you'd barely
-    /// begun reported itself complete and the Resume row never appeared.
-    private func roundsDone(against plan: TodaySession) -> Int {
-        history
-            .filter { $0.sessionID == plan.sessionID }
-            .reduce(0) { $0 + $1.roundsCompleted }
-    }
-
     /// What's left of the latest plan, or nil when it's finished or was never
     /// started.
     ///
@@ -374,7 +361,16 @@ struct ContentView: View {
         // before sessions were linked are the only ones like this.
         guard !plan.sessionID.isEmpty else { return nil }
 
-        let done = roundsDone(against: plan)
+        let sittings = history.filter { $0.sessionID == plan.sessionID }
+
+        // A sitting that reached the debrief *is* the plan finished, whatever the
+        // round arithmetic works out to. The count alone was leaving the
+        // accessory up after a session seen through to the end: rounds added by
+        // "one more round" and rounds cut short both make the total disagree with
+        // the plan's, and either way there's nothing left to resume.
+        if sittings.contains(where: { !$0.endedEarly }) { return nil }
+
+        let done = sittings.reduce(0) { $0 + $1.roundsCompleted }
         guard done < plan.roundCount else { return nil }
         return (plan, done)
     }
