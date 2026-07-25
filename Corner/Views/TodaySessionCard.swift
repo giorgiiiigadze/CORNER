@@ -80,10 +80,10 @@ struct TodaySessionCard: View {
         // top-left corner — the mockup's glow, kept faint so it reads as the
         // card catching the brand rather than a second surface.
         .background {
-            RoundedRectangle(cornerRadius: 4, style: .continuous)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(Theme.Palette.dashboardSurface)
                 .overlay {
-                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .fill(
                             LinearGradient(
                                 colors: [Theme.Palette.accent.opacity(0.16), .clear],
@@ -108,9 +108,23 @@ struct TodaySessionCard: View {
     /// `.glassProminent` are the system's own button styles, so these get the
     /// real material, the press-in refraction and the shape morphing for free,
     /// and match the tab bar and the accessory drawn from the same glass.
-    @ViewBuilder
     private var actions: some View {
-        if plan == nil {
+        // The same pair in both states. With a plan the reminder is pinned to
+        // that session; without one it's a plain nudge to come back and train —
+        // still worth setting, so the button is here either way rather than
+        // appearing only once a plan exists.
+        HStack(spacing: 12) {
+            Button {
+                pickingTime = true
+            } label: {
+                Text("Set Reminder")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.glass)
+            .controlSize(.large)
+            .buttonBorderShape(.capsule)
+
             Button(action: onStart) {
                 primaryLabel
             }
@@ -118,27 +132,6 @@ struct TodaySessionCard: View {
             .tint(Theme.Palette.accent)
             .controlSize(.large)
             .buttonBorderShape(.capsule)
-        } else {
-            HStack(spacing: 12) {
-                Button {
-                    pickingTime = true
-                } label: {
-                    Text("Set Reminder")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.glass)
-                .controlSize(.large)
-                .buttonBorderShape(.capsule)
-
-                Button(action: onStart) {
-                    primaryLabel
-                }
-                .buttonStyle(.glassProminent)
-                .tint(Theme.Palette.accent)
-                .controlSize(.large)
-                .buttonBorderShape(.capsule)
-            }
         }
     }
 
@@ -191,14 +184,18 @@ struct TodaySessionCard: View {
     }
 
     private func setReminder() {
-        guard let plan else { return }
         let time = reminderTime
+        // A plan pins the reminder to its session; without one it's a standing
+        // "home" reminder to come back and train. The fixed id means either
+        // kind replaces the last, so there's never a stack of them.
+        let sessionID = plan?.sessionID ?? "home-reminder"
+        let focus = plan?.focus ?? ""
 
         Task {
             let ok = await SessionReminder.schedule(
                 at: time,
-                sessionID: plan.sessionID,
-                focus: plan.focus
+                sessionID: sessionID,
+                focus: focus
             )
             await MainActor.run {
                 if ok { scheduledFor = time }
@@ -214,19 +211,27 @@ struct TodaySessionCard: View {
     }
 
     private var startTitle: String {
-        guard plan != nil else { return "Start a session" }
-        return isResuming ? "Resume" : "Start"
+        // "Start" alone now the button shares the row with Set Reminder —
+        // "Start a session" wrapped to two lines in half the width, and the
+        // headline already says session.
+        isResuming ? "Resume" : "Start"
     }
 
     private var headline: String {
-        guard let plan else { return "Ready when you are" }
-        // The session's own name, decoded from the stored plan; its focus line
-        // is the fallback for the plans written before a title was kept.
+        guard let plan else { return "Start a session" }
+        // What today is *for*, not what the session is called. The focus is the
+        // one word the fighter came to see — the title ("Sharpening day") is
+        // flavour, the focus ("Guard") is the plan. Falls back to the title,
+        // then the subtitle, only when a plan somehow carries no focus.
+        let focus = plan.focus.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !focus.isEmpty { return focus.capitalized }
         return plan.session?.title ?? plan.subtitle
     }
 
-    /// "6 rounds · 3 min · guard focus". Nil with no plan — there's nothing to
-    /// describe, and the invitation reads better without an empty line under it.
+    /// "6 rounds · 3 min". Nil with no plan — there's nothing to describe, and
+    /// the invitation reads better without an empty line under it. The focus is
+    /// no longer here: it's the headline now, and repeating it under itself was
+    /// the same word twice.
     private var detail: String? {
         guard let plan else { return nil }
 
@@ -236,11 +241,6 @@ struct TodaySessionCard: View {
         // same clock, so one of them stands for all.
         if let seconds = plan.session?.rounds.first?.durationSeconds, seconds >= 60 {
             parts.append("\(seconds / 60) min")
-        }
-
-        let focus = plan.focus.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !focus.isEmpty {
-            parts.append("\(focus) focus")
         }
 
         return parts.joined(separator: "  ·  ")

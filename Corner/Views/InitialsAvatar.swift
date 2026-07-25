@@ -53,14 +53,18 @@ struct InitialsAvatar: View {
     /// made of, split on the separators people actually use. "gio.giorgadze@…"
     /// is GG, "giorgi@…" is G. Digits are dropped — "…20@gmail" shouldn't put a
     /// 2 on the disc.
-    private var initials: String {
-        if let name, let letters = Self.initials(fromWords: name.split(separator: " ")) {
+    private var initials: String { Self.initials(name: name, email: email) }
+
+    /// The one or two letters, exposed so a full-bleed header can draw the same
+    /// mark this disc does without reaching into it.
+    static func initials(name: String?, email: String?) -> String {
+        if let name, let letters = initials(fromWords: name.split(separator: " ")) {
             return letters
         }
 
         if let local = email?.split(separator: "@").first {
             let words = local.split(whereSeparator: { !$0.isLetter })
-            if let letters = Self.initials(fromWords: words) { return letters }
+            if let letters = initials(fromWords: words) { return letters }
         }
 
         return "?"
@@ -78,8 +82,12 @@ struct InitialsAvatar: View {
 
     // MARK: - Colour
 
-    private var background: Color {
-        Self.palette[Self.index(for: seed, count: Self.palette.count)]
+    private var background: Color { Self.color(seed: seed) }
+
+    /// The seeded disc colour, exposed so the profile header can fill itself with
+    /// the same colour the small disc uses — one identity in two sizes.
+    static func color(seed: String) -> Color {
+        palette[index(for: seed, count: palette.count)]
     }
 
     /// Ten discs, the supplied set.

@@ -570,10 +570,16 @@ struct ContentView: View {
                     doneRounds: unfinishedToday?.done ?? 0,
                     onStart: startToday
                 )
-                .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+                // Inset by hand rather than by the section, and the section's own
+                // margins dropped to zero — so the card sits *inside* the cell's
+                // rounded clip instead of flush with it. Flush, the grouped cell
+                // rounded the card to the system radius and the card's own corner
+                // never showed; held off the edge, the card's square corner wins.
+                .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
             }
+            .listSectionMargins(.horizontal, 0)
 
             // Directly under the card rather than at the foot of the screen: a
             // failure to write today's session is about the card, and an error

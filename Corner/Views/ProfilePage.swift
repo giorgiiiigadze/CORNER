@@ -3,14 +3,14 @@ import SwiftUI
 
 /// Who you are and what you've built.
 ///
-/// Centred and top-heavy on purpose — the shape every profile screen has, and it
-/// earns its place here: the avatar and the three numbers under it are the whole
-/// point of the page, and a fighter opening it is looking for a total, not a
-/// control. Everything adjustable is one tap further in.
+/// Built to the shape a social profile has — a full-bleed header with the name
+/// laid over it, a line of totals, a row of actions, then the record below —
+/// because that's the page a fighter already knows how to read. What's different
+/// is the data: the numbers under the name aren't friends and followers, they're
+/// sessions, rounds and the streak, which is the only standing this app keeps.
 ///
-/// The split from Settings is by subject. This page is about the *person* — the
-/// account, the record, whether that record is safely off the phone. Settings is
-/// about the *app*: which voice it uses, whether it talks.
+/// The split from Settings holds: this page is the *person* and the record,
+/// Settings is the *app*.
 struct ProfilePage: View {
 
     let history: [TrainingRecord]
@@ -25,121 +25,216 @@ struct ProfilePage: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 28) {
-                identity
-                if hasBodyStats { bodyStats }
-                backup
+            VStack(spacing: 0) {
+                header
+
+                VStack(spacing: 22) {
+                    statLine
+                    if hasWeek { weekSection }
+                    if hasBodyStats { bodySection }
+                    backup
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 18)
+                .padding(.bottom, 32)
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
-            .padding(.bottom, 32)
         }
         .scrollIndicators(.hidden)
         .background(Theme.Palette.background)
+        // The header runs to the very top edge, under the status bar and the
+        // gear, the way a cover photo does — so the scroll content is allowed
+        // into the top safe area and the bar draws no background over it.
+        .ignoresSafeArea(edges: .top)
         .toolbar { bar }
+        .toolbarBackground(.hidden, for: .navigationBar)
     }
 
-    // MARK: - Identity
+    // MARK: - Header
 
-    private var identity: some View {
-        VStack(spacing: 12) {
-            // Yours, not the app's. This was a red disc with a boxing glove on
-            // it — the same image for every account on earth, which is a logo
-            // in the place a profile picture goes.
-            //
-            // Seeded on the user id so the colour survives changing your
-            // address, and so two people on one phone don't get the same disc.
-            InitialsAvatar(
-                name: auth.displayName,
-                email: auth.email,
-                seed: auth.userID ?? auth.email ?? ""
+    /// The full-bleed cover. No uploaded photo yet, so the picture *is* the
+    /// avatar: the whole banner is the seeded colour the small disc uses, the
+    /// initials filling it edge to edge rather than sitting in a circle. The name
+    /// and handle sit over the foot of it on a scrim, where a photo caption
+    /// would. Square at the top so it meets the screen edge, rounded only at the
+    /// bottom where the page begins.
+    private var header: some View {
+        ZStack(alignment: .bottomLeading) {
+            InitialsAvatar.color(seed: avatarSeed)
+
+            // The initials as the portrait — huge, centred, dimmed just enough
+            // that the name reading over the bottom of it stays the louder mark.
+            Text(InitialsAvatar.initials(name: auth.displayName, email: auth.email))
+                .font(.system(size: 180, weight: .bold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.9))
+                .minimumScaleFactor(0.5)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            // A scrim so the name holds up over the colour, the same way a
+            // caption stays legible over a photo.
+            LinearGradient(
+                colors: [.clear, .black.opacity(0.55)],
+                startPoint: .center,
+                endPoint: .bottom
             )
+            .allowsHitTesting(false)
 
-            // The name when the profile has one, the address until then. Both
-            // are the same line rather than a name *above* an address: one of
-            // the two is always missing, and a layout that reserves space for
-            // both is a gap on most accounts.
-            Text(auth.displayName ?? auth.email ?? "Signed in")
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(displayName)
+                    .font(.system(size: 34, weight: .bold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
 
-            // The address moves down here once a name has taken the line above
-            // it, so nothing that was on screen disappears when a name arrives.
-            if auth.displayName != nil, let email = auth.email {
-                Text(email)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                Text("@\(handle)")
+                    .font(.headline)
+                    .foregroundStyle(.white.opacity(0.85))
                     .lineLimit(1)
             }
+            .padding(20)
+        }
+        .frame(height: 460)
+        .frame(maxWidth: .infinity)
+        // Bottom corners only — the top meets the screen edge square.
+        .clipShape(.rect(bottomLeadingRadius: 20, bottomTrailingRadius: 20, style: .continuous))
+    }
 
-            if let since = stats.lastTrained {
-                Text("Last trained \(since.formatted(.relative(presentation: .named)))")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
+    private var avatarSeed: String { auth.userID ?? auth.email ?? "" }
+
+    /// The name over the header. The display name when there is one, otherwise
+    /// the local part of the address — never the raw email, which reads as a
+    /// login, not a person.
+    private var displayName: String {
+        if let name = auth.displayName, !name.isEmpty { return name }
+        if let email = auth.email { return String(email.split(separator: "@").first ?? "Fighter") }
+        return "Fighter"
+    }
+
+    /// The handle under the name, built from the address so it's stable and the
+    /// user's own — spaces and dots folded to underscores the way a username is.
+    private var handle: String {
+        let base = auth.email.map { String($0.split(separator: "@").first ?? "") }
+            ?? auth.displayName
+            ?? "fighter"
+        return base.lowercased()
+            .replacingOccurrences(of: " ", with: "_")
+            .replacingOccurrences(of: ".", with: "_")
+    }
+
+    // MARK: - Stat line
+
+    /// Sessions, rounds and the streak, where the reference has friends,
+    /// followers and following — the three totals that add up to a standing on
+    /// this app. Rendered as one flowing line, bold number and quiet label, with
+    /// a dot between.
+    private var statLine: some View {
+        HStack(spacing: 8) {
+            statPiece("\(stats.totalSessions)", stats.totalSessions == 1 ? "session" : "sessions")
+            dot
+            statPiece("\(stats.totalRounds)", stats.totalRounds == 1 ? "round" : "rounds")
+            dot
+            statPiece("\(stats.streak)", stats.streak == 1 ? "day streak" : "day streak")
+            Spacer(minLength: 0)
         }
     }
 
-    // MARK: - Stat item
-
-    /// One big-over-small figure, grouped in the middle with its siblings rather
-    /// than spread across the width — what keeps them reading as one line under
-    /// the name instead of a row of separate columns.
-    private func total(_ value: String, _ label: String) -> some View {
-        VStack(spacing: 2) {
+    private func statPiece(_ value: String, _ label: String) -> some View {
+        HStack(spacing: 5) {
             Text(value)
-                .font(.system(size: 17, weight: .bold))
+                .font(.subheadline.weight(.bold))
                 .foregroundStyle(.primary)
-                .contentTransition(.numericText())
-
             Text(label)
-                .font(.system(size: 13))
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
     }
 
-    // MARK: - Body stats
+    private var dot: some View {
+        Text("·").font(.subheadline).foregroundStyle(.secondary)
+    }
 
-    /// Weight, height and age, shown only once there's at least one of them —
-    /// filled from Apple Health or typed in Manage Profile. An empty row here
-    /// would be a prompt on a page that's meant to be a record, so it stays gone
-    /// until there's something to record.
+    // MARK: - This week
+
+    /// The "Pins" slot, but a record rather than a scrapbook: the week's work in
+    /// three tiles. Hidden until there's a week to show, so a fresh account isn't
+    /// met with a row of zeroes.
+    private var hasWeek: Bool { stats.sessionsThisWeek > 0 }
+
+    private var weekSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionTitle("This week")
+
+            HStack(spacing: 10) {
+                tile("\(stats.sessionsThisWeek)", stats.sessionsThisWeek == 1 ? "session" : "sessions")
+                tile("\(stats.roundsThisWeek)", "rounds")
+                tile("\(stats.minutesThisWeek)", "min")
+            }
+        }
+    }
+
+    // MARK: - Body
+
     private var hasBodyStats: Bool {
         auth.weightKg != nil || auth.heightCm != nil || auth.birthdate != nil
     }
 
-    private var bodyStats: some View {
-        HStack(spacing: 34) {
-            if let weight = ManageProfileView.weightText(auth.weightKg) {
-                total(weight, "Weight")
-            }
-            if let height = ManageProfileView.heightText(auth.heightCm) {
-                total(height, "Height")
-            }
-            if let age = ageText {
-                total(age, "Age")
+    private var bodySection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionTitle("Body")
+
+            HStack(spacing: 10) {
+                if let weight = ManageProfileView.weightText(auth.weightKg) {
+                    tile(weight, "Weight")
+                }
+                if let height = ManageProfileView.heightText(auth.heightCm) {
+                    tile(height, "Height")
+                }
+                if let age = ageText {
+                    tile(age, "Age")
+                }
             }
         }
-        .frame(maxWidth: .infinity)
     }
 
-    /// Age in whole years from the birthdate, which is what a profile shows —
-    /// the date itself is an edit-screen detail, not a headline number.
     private var ageText: String? {
         guard let birthdate = auth.birthdate else { return nil }
         let years = Calendar.current.dateComponents([.year], from: birthdate, to: .now).year
         return years.map(String.init)
     }
 
+    // MARK: - Shared pieces
+
+    private func sectionTitle(_ text: String) -> some View {
+        Text(text)
+            .font(.title3.weight(.bold))
+            .foregroundStyle(.primary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// One figure in a card — the tile the week and body rows are built from.
+    private func tile(_ value: String, _ label: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(value)
+                .font(.title2.weight(.bold))
+                .foregroundStyle(.primary)
+                .contentTransition(.numericText())
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+
+            Text(label)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(Theme.Palette.surface, in: .rect(cornerRadius: 12))
+    }
+
     // MARK: - Backup
 
-    /// Whether the sessions on this phone have reached the account.
-    ///
-    /// On screen rather than in a log, because it's the one thing on the device
-    /// a fighter can't otherwise find out and can't afford to be wrong about: a
-    /// backup that quietly isn't happening looks exactly like one that is, right
-    /// up until the phone is replaced.
+    /// Whether the sessions on this phone have reached the account — the one
+    /// thing on the device a fighter can't otherwise find out, and can't afford
+    /// to be wrong about.
     private var backup: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
@@ -179,16 +274,11 @@ struct ProfilePage: View {
                 .foregroundStyle(.secondary)
         }
         .padding(16)
-        .background(Theme.Palette.surface, in: .rect(cornerRadius: 18))
+        .background(Theme.Palette.surface, in: .rect(cornerRadius: 12))
     }
 
     // MARK: - Bar
 
-    /// The wide button in the header, where the reference has "Edit".
-    ///
-    /// Settings rather than an edit screen, because there's nothing to edit yet
-    /// — `display_name` is waiting in the profiles table and the moment it's
-    /// wired this is the button that opens it.
     @ToolbarContentBuilder
     private var bar: some ToolbarContent {
         ToolbarItem(placement: .topBarTrailing) {
@@ -196,13 +286,8 @@ struct ProfilePage: View {
                 SettingsView()
             } label: {
                 Image(systemName: "gearshape.fill")
-                    // Padding widens the capsule; the bar still owns the height
-                    // and the material. A frame here is what made the first
-                    // toolbar attempt look like nothing else on the phone.
                     .padding(.horizontal, 8)
             }
-            // The word is gone, so the label has to live here — a bare glyph
-            // announces itself as "gearshape" to VoiceOver otherwise.
             .accessibilityLabel("Settings")
         }
     }
